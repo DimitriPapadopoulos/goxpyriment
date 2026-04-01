@@ -27,6 +27,11 @@ cd "$SCRIPT_DIR"
 
 echo "Generating PDFs in docs/ ..."
 
+pandoc Installation.md "${PANDOC_OPTS[@]}" \
+  -V title="goxpyriment — Installation" \
+  -o Installation.pdf
+echo "  ✓ Installation.pdf"
+
 pandoc GettingStarted.md "${PANDOC_OPTS[@]}" \
   -V title="goxpyriment — Getting Started" \
   -o GettingStarted.pdf
@@ -37,9 +42,14 @@ pandoc UserManual.md "${PANDOC_OPTS[@]}" \
   -o UserManual.pdf
 echo "  ✓ UserManual.pdf"
 
+pandoc MigrationGuide.md "${PANDOC_OPTS[@]}" \
+  -V title="goxpyriment — Migration Guide" \
+  -o MigrationGuide.pdf
+echo "  ✓ MigrationGuide.pdf"
+
 pandoc API.md "${PANDOC_OPTS[@]}" \
   -V title="goxpyriment — API Reference" \
   -o API.pdf
 echo "  ✓ API.pdf"
 
-echo "Done. Run 'mkdocs gh-deploy' to publish."
+echo "Done. Commit the PDFs and push — they will be published via GitHub Actions."

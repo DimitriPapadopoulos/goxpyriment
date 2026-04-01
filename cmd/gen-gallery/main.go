@@ -1,11 +1,11 @@
 // Copyright (2026) Christophe Pallier <christophe@pallier.org>
 // Distributed under the GNU General Public License v3.
 
-// gen-readme regenerates the example tables in examples/README.md from
+// gen-gallery regenerates the example tables in docs/GalleryOfExamples.md from
 // per-example meta.yaml files.
 //
-// Run from the repo root via: make update-readme
-// (which cd's into examples/ and runs: go run ./cmd/gen-readme/)
+// Run from the repo root via: make update-examples-gallery
+// (runs: go run ./cmd/gen-gallery/)
 //
 // Each example directory that contains a main.go should also contain
 // a meta.yaml file with three fields:
@@ -14,12 +14,12 @@
 //	description: One-line task summary.
 //	reference:   Author (year)  # empty string for demos
 //
-// The script rewrites the content between these sentinel comments in README.md:
+// The script rewrites the content between these sentinel comments in GalleryOfExamples.md:
 //
 //	<!-- BEGIN:experiments -->  …  <!-- END:experiments -->
 //	<!-- BEGIN:demos -->        …  <!-- END:demos -->
 //
-// All other content in README.md is left untouched.
+// All other content in GalleryOfExamples.md is left untouched.
 package main
 
 import (
@@ -69,12 +69,12 @@ func readMeta(dir string) (meta, bool) {
 	return m, m.category != "" && m.description != ""
 }
 
-// collectExamples walks the current directory (expected: examples/) for
-// direct subdirectories that contain a main.go, and returns:
+// collectExamples walks examples/ for direct subdirectories that contain a
+// main.go, and returns:
 //   - metas: all entries with a valid meta.yaml, sorted case-insensitively
 //   - undocumented: directory names without a meta.yaml, sorted
 func collectExamples() ([]meta, []string) {
-	entries, err := os.ReadDir(".")
+	entries, err := os.ReadDir("examples")
 	if err != nil {
 		log.Fatalf("reading examples dir: %v", err)
 	}
@@ -90,15 +90,15 @@ func collectExamples() ([]meta, []string) {
 		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 			continue
 		}
-		// Skip the cmd/ utility directory (gen-readme lives there).
+		// Skip the cmd/ utility directory.
 		if name == "cmd" {
 			continue
 		}
 		// Only include directories that directly contain a main.go.
-		if _, err := os.Stat(filepath.Join(name, "main.go")); err != nil {
+		if _, err := os.Stat(filepath.Join("examples", name, "main.go")); err != nil {
 			continue
 		}
-		m, ok := readMeta(name)
+		m, ok := readMeta(filepath.Join("examples", name))
 		if !ok {
 			undocumented = append(undocumented, name)
 			continue
@@ -113,6 +113,8 @@ func collectExamples() ([]meta, []string) {
 	return metas, undocumented
 }
 
+const repoExamplesURL = "https://github.com/chrplr/goxpyriment/tree/main/examples"
+
 // experimentTable returns the Markdown table body for experiments.
 func experimentTable(metas []meta) string {
 	var sb strings.Builder
@@ -122,7 +124,7 @@ func experimentTable(metas []meta) string {
 		if m.category != "experiment" {
 			continue
 		}
-		fmt.Fprintf(&sb, "| [%s](%s/) | %s | %s |\n", m.dir, m.dir, m.description, m.reference)
+		fmt.Fprintf(&sb, "| [%s](%s/%s) | %s | %s |\n", m.dir, repoExamplesURL, m.dir, m.description, m.reference)
 	}
 	return sb.String()
 }
@@ -136,7 +138,7 @@ func demoTable(metas []meta) string {
 		if m.category != "demo" {
 			continue
 		}
-		fmt.Fprintf(&sb, "| [%s](%s/) | %s |\n", m.dir, m.dir, m.description)
+		fmt.Fprintf(&sb, "| [%s](%s/%s) | %s |\n", m.dir, repoExamplesURL, m.dir, m.description)
 	}
 	return sb.String()
 }
@@ -191,14 +193,14 @@ func countCategory(metas []meta, cat string) int {
 }
 
 func main() {
-	const readmePath = "README.md"
+	const galleryPath = "docs/GalleryOfExamples.md"
 
 	metas, undocumented := collectExamples()
 
-	// Read README.md line by line.
-	f, err := os.Open(readmePath)
+	// Read GalleryOfExamples.md line by line.
+	f, err := os.Open(galleryPath)
 	if err != nil {
-		log.Fatalf("open %s: %v", readmePath, err)
+		log.Fatalf("open %s: %v", galleryPath, err)
 	}
 	var lines []string
 	sc := bufio.NewScanner(f)
@@ -207,7 +209,7 @@ func main() {
 	}
 	_ = f.Close()
 	if err := sc.Err(); err != nil {
-		log.Fatalf("scan %s: %v", readmePath, err)
+		log.Fatalf("scan %s: %v", galleryPath, err)
 	}
 
 	// Rewrite sentinel sections.
@@ -219,9 +221,9 @@ func main() {
 		demoTable(metas))
 
 	// Write the result back.
-	out, err := os.Create(readmePath)
+	out, err := os.Create(galleryPath)
 	if err != nil {
-		log.Fatalf("create %s: %v", readmePath, err)
+		log.Fatalf("create %s: %v", galleryPath, err)
 	}
 	w := bufio.NewWriter(out)
 	for _, l := range lines {

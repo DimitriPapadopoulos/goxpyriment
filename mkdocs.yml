@@ -38,6 +38,7 @@ nav:
   - User Manual: UserManual.md
   - API Reference: API.md
   - SDL Usage Notes: library_usage.md
+  - Gallery of Examples: GalleryOfExamples.md
 
 markdown_extensions:
   - admonition

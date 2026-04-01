@@ -39,7 +39,6 @@ Thumbs.db
 
 # Generated documentation artefacts
 site/
-docs/*.pdf
 
 # LaTeX build artefacts
 paper/*.aux
