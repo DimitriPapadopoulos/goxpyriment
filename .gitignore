@@ -1,0 +1,53 @@
+# Data files
+/data/
+goxpy_data/
+xpd_results/
+octin_college_font/
+gvassets/
+
+# Compiled binaries
+_build/
+/tests/test_audio/test_audio
+/tests/test_fullscreen/test_fullscreen
+/tests/test_playgv/test_playgv
+/tests/test_stream_images/test_stream_images
+/tests/test_stream_text/test_stream_text
+/tests/Timing-Tests/Timing-Tests
+
+# General binary patterns
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+*.wasm
+test.bin
+
+# Node / browser tooling
+node_modules/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Generated documentation artefacts
+site/
+docs/*.pdf
+
+# LaTeX build artefacts
+paper/*.aux
+paper/*.bcf
+paper/*.blg
+paper/*.bbl
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.pdf
+paper/*.run.xml
