@@ -29,12 +29,12 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 | Document | | PDF |
 |---|---|---|
-| [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |
-| [Getting Started](GettingStarted.md) | Tutorial for psychologists | [↓](GettingStarted.pdf) |
-| [Gallery of Examples](GalleryOfExamples.md) | Ready-to-run experiments and demos | |
-| [User Manual](UserManual.md) | Core concepts explained in depth | [↓](UserManual.pdf) |
-| [Migration Guide](MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](MigrationGuide.pdf) |
-| [API Reference](API.md) | Complete function and type reference | [↓](API.pdf) |
+| [Installation](docs/Installation.md) | Install Go and build the examples | [↓](docs/Installation.pdf) |
+| [Getting Started](docs/GettingStarted.md) | Tutorial for psychologists | [↓](docs/GettingStarted.pdf) |
+| [Gallery of Examples](docs/GalleryOfExamples.md) | Ready-to-run experiments and demos | |
+| [User Manual](docs/UserManual.md) | Core concepts explained in depth | [↓](docs/UserManual.pdf) |
+| [Migration Guide](docs/MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](docs/MigrationGuide.pdf) |
+| [API Reference](docs/API.md) | Complete function and type reference | [↓](docs/API.pdf) |
 
 
 ---
