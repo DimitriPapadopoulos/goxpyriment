@@ -95,12 +95,12 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 | [Simon_task](https://github.com/chrplr/goxpyriment/tree/main/examples/Simon_task) | Identify colour of a square regardless of its screen position; congruent trials are faster | Simon (1969) |
 | [simple_reaction_times](https://github.com/chrplr/goxpyriment/tree/main/examples/simple_reaction_times) | 20-trial simple RT task: press any key as quickly as possible when a target appears |  |
 | [Statistical-Learning-Auditory](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Auditory) | Statistical learning of tone sequences: exposure to a continuous tone stream with structured transitional probabilities, probed with 2AFC or head-turn preference | Saffran et al. (1999) |
+| [Statistical-Learning-Visual](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Visual) | Implicit learning of statistical regularities in a shape stream, probed with forced-choice and RT tests | Turk-Browne et al. (2005) |
 | [Stroop_task](https://github.com/chrplr/goxpyriment/tree/main/examples/Stroop_task) | Name the ink colour of colour words; incongruent trials (e.g. RED in blue ink) are slower | Stroop (1935) |
 | [Subliminal-Priming](https://github.com/chrplr/goxpyriment/tree/main/examples/Subliminal-Priming) | Masked word priming: words rendered invisible by surrounding masks still influence processing | Dehaene et al. (2004) |
 | [Temporal-Integration-Word-Recognition](https://github.com/chrplr/goxpyriment/tree/main/examples/Temporal-Integration-Word-Recognition) | Alternating odd/even letter components at variable SOA; Exp 1 (subjective report: 0/1/2 words perceived) and Exp 2 (lexical decision with RT); experiment selected via GetParticipantInfo UI | Forget et al. (2010) |
 | [Trubutschek_Unconscious_Working_Memory](https://github.com/chrplr/goxpyriment/tree/main/examples/Trubutschek_Unconscious_Working_Memory) | Probe access to briefly presented stimuli below and above the threshold of consciousness | Trübutschek et al. (2017) |
 | [Visual-Illusion-Lilac-Chaser](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Lilac-Chaser) | Lilac chaser illusion: a ring of disappearing disks produces a rotating green afterimage |  |
-| [Visual_Statistical_Learning](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual_Statistical_Learning) | Implicit learning of statistical regularities in a shape stream, probed with forced-choice and RT tests | Turk-Browne et al. (2005) |
 <!-- END:experiments -->
 
 ---
