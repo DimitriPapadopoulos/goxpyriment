@@ -1,8 +1,41 @@
 # goxpyriment
 
+
 `goxpyriment` is a high-level Go framework for building behavioral and psychological experiments with precise, VSYNC-locked stimulus timing.
 
-**Full documentation:** <https://chrplr.github.io/goxpyriment>
+
+* Full documentation: <https://chrplr.github.io/goxpyriment>
+* Gallery of Examples: [source code](./examples/)
+* [Google group](https://groups.google.com/a/pallier.org/g/goxpyriment) — Forum
+* Report bugs at <https://github.com/chrplr/goxpyriment/issues>
+
+If you are looking for a simpler, *no-code experiment generator*, check out [Gostim2](https://chrplr.github.io/gostim2/).
+
+---
+
+## Why goxpyriment?
+
+1. **Zero-dependency deployment.** A finished experiment compiles to a single binary — an `.exe` on Windows, an AppImage on Linux, a `.app` on macOS. No Python, no conda, no DLL hell on lab computers.
+2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware.
+3. **AI-friendly API.** The linear, consistent API is well suited to "vibe-coding" — describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is usually 90 % ready to run immediately.
+
+> 💡 **Vibe-coding tip:** After installation, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
+
+> ⚠️ **Beta:** This software is in beta-testing. It is usable for real lab experiments, but users should carefully validate timing behaviour, e.g. with a [bbtk](https://chrplr.github.io/bbtkv3/).
+
+---
+
+## Documentation
+
+| Document | | PDF |
+|---|---|---|
+| [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |
+| [Getting Started](GettingStarted.md) | Tutorial for psychologists | [↓](GettingStarted.pdf) |
+| [Gallery of Examples](GalleryOfExamples.md) | Ready-to-run experiments and demos | |
+| [User Manual](UserManual.md) | Core concepts explained in depth | [↓](UserManual.pdf) |
+| [Migration Guide](MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](MigrationGuide.pdf) |
+| [API Reference](API.md) | Complete function and type reference | [↓](API.pdf) |
+
 
 ---
 
