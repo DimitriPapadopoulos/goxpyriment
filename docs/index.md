@@ -59,6 +59,15 @@ func main() {
 }
 ```
 
+Save this as `hello/main.go`, then in the `hello` folder run once:
+
+```bash
+go mod init hello
+go mod tidy
+```
+
+Then:
+
 ```bash
 go run . -w        # windowed mode
 go run . -w -s 1   # windowed, subject ID = 1
