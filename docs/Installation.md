@@ -17,7 +17,7 @@ cd goxpyriment
 make examples
 ```
 
-This compiles the codes in [examples/*](../examples/). If all goes well, the `_build` folder should now contain  executable (apps) for many experiments. If not report the issue on 
+This compiles the codes in [examples/*](https://github.com/chrplr/goxpyriment/tree/main/examples). If all goes well, the `_build` folder should now contain  executable (apps) for many experiments. If not report the issue on 
 
 The first time, it will take a while because Go needs to download several libraries. Once done, compilation will be fast.
  
@@ -25,7 +25,7 @@ The first time, it will take a while because Go needs to download several librar
 
 ### Program your own experiment
 
-After having a look at [Getting Started][GettingStarted.md), and the examples 's [source codes](../examples/).
+After having a look at [Getting Started](GettingStarted.md), and the examples' [source codes](https://github.com/chrplr/goxpyriment/tree/main/examples).
  the [available functions](API.md)
 
 
