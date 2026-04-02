@@ -558,7 +558,7 @@ func GetParticipantInfo(title string, fields []InfoField) (map[string]string, er
 		// OK button (green)
 		renderer.SetDrawColor(colGreen.R, colGreen.G, colGreen.B, colGreen.A)
 		renderer.RenderFillRect(&okBtn)
-		renderCentered("OK", okBtn, colWhite)
+		renderCentered("Go!", okBtn, colWhite)
 
 		// Cancel button (red)
 		renderer.SetDrawColor(colRed.R, colRed.G, colRed.B, colRed.A)
