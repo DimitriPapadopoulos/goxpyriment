@@ -1,7 +1,7 @@
 # goxpyriment
 
 
-`goxpyriment` is a high-level Go framework for building behavioral and psychological experiments with precise, VSYNC-locked stimulus timing.
+`goxpyriment` is a high-level Go framework for building behavioral and psychological experiments with precise stimulus timing.
 
 
 * Full documentation: <https://chrplr.github.io/goxpyriment>
@@ -19,9 +19,9 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware.
 3. **AI-friendly API.** The linear, consistent API is well suited to "vibe-coding" — describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is usually 90 % ready to run immediately.
 
-> 💡 **Vibe-coding tip:** After installation, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
+> 💡 **TIP:** _AI assisted coding_ After cloning the repository, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
 
-> ⚠️ **Beta:** This software is in beta-testing. It is usable for real lab experiments, but users should carefully validate timing behaviour, e.g. with a [bbtk](https://chrplr.github.io/bbtkv3/).
+> ⚠️ **Beta:** This software is in beta-testing. Although it is usable for real lab experiments, users should (as always) carefully test their program's behaviour, e.g. with a [bbtk](https://chrplr.github.io/bbtkv3/).
 
 ---
 
@@ -41,9 +41,11 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 Inspired by [expyriment.org](https://github.com/expyriment/expyriment). Built on [libsdl](http://libsdl.org) via [go-sdl3](https://github.com/Zyko0/go-sdl3). Licensed under the GNU GPL v3.
 
-Please cite as:
-> Christophe Pallier (2026) chrplr/goxpyriment: Goxpyriment vX.Y.Z. Zenodo. https://doi.org/10.5281/zenodo.19200598
+Please cite this repository as:
+> Christophe Pallier (2026) Goxpyriment vX.Y.Z. Zenodo. https://doi.org/10.5281/zenodo.19200598
 
+
+[Christophe Pallier](https://github.com/chrplr)
 ---
 
 ![](assets/icon_512.png)

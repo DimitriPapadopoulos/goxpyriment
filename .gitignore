@@ -48,5 +48,4 @@ paper/*.bbl
 paper/*.fdb_latexmk
 paper/*.fls
 paper/*.log
-paper/*.pdf
 paper/*.run.xml

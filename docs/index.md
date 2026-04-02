@@ -16,7 +16,7 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware.
 3. **AI-friendly API.** The linear, consistent API is well suited to "vibe-coding" — describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is usually 90 % ready to run immediately.
 
-> 💡 **Vibe-coding tip:** After installation, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
+OD> 💡 **TIP:* _AI assisted coding_ After cloning the repository, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
 
 > ⚠️ **Beta:** This software is in beta-testing. It is usable for real lab experiments, but users should carefully validate timing behaviour, e.g. with a [bbtk](https://chrplr.github.io/bbtkv3/).
 
@@ -24,10 +24,14 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 ## Documentation
 
+You can start by downloading [goxpyriment-paper.pdf](https://github.com/chrplr/goxpyriment/tree/main/goxpryriment-paper.pdf)] which describes the goals and features of the framework. 
+
+Then, to go further:
+
 | Document | | PDF |
 |---|---|---|
 | [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |
-| [Getting Started](GettingStarted.md) | Tutorial for psychologists | [↓](GettingStarted.pdf) |
+| [Getting Started](GettingStarted.md) | Tutorials | [↓](GettingStarted.pdf) |
 | [Gallery of Examples](GalleryOfExamples.md) | Ready-to-run experiments and demos | |
 | [User Manual](UserManual.md) | Core concepts explained in depth | [↓](UserManual.pdf) |
 | [Migration Guide](MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](MigrationGuide.pdf) |
@@ -37,65 +41,59 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 ## Quick Start
 
-```go
-package main
+* Download and install Go from <https://go.dev> (See [Installing-a-development-environment.md](Installing-a-development-environment.md) if you are new to this).
 
-import (
-    "github.com/chrplr/goxpyriment/control"
-    "github.com/chrplr/goxpyriment/stimuli"
-)
+* Clone goxpriment and check that you can compile the examples, by executing the following commands in a Terminal (`Git Bash` for Windows):
 
-func main() {
-    exp := control.NewExperimentFromFlags("Hello World", control.Black, control.White, 32)
-    defer exp.End()
 
-    hello := stimuli.NewTextBox("Hello, World!", 600, control.FPoint{}, control.White)
+        git clone https://github.com/chrplr/goxpyriment.git
+        cd goxpyriment
+        make examples
 
-    exp.Run(func() error {
+
+* Create a `hello` folder somewhere on your computer, and create  `main.go` inside it, containing the following code:
+
+    ```go
+    package main
+
+    import (
+      "github.com/chrplr/goxpyriment/control"
+      "github.com/chrplr/goxpyriment/stimuli"
+    )
+
+    func main() {
+      exp := control.NewExperimentFromFlags("Hello World", control.Black, control.White, 32)
+      defer exp.End()
+
+      hello := stimuli.NewTextBox("Hello, World!", 600, control.FPoint{}, control.White)
+
+      exp.Run(func() error {
         exp.Show(hello)
         exp.Keyboard.Wait()
         return control.EndLoop
-    })
-}
-```
+      })
+    }
+    ```
 
-Save this as `hello/main.go`, then in the `hello` folder run once:
+* Initialize dependencies in the `hello` folder:
 
-```bash
-go mod init hello
-go mod tidy
-```
+    ```bash
+    go mod init hello
+    go mod tidy
+    ```
 
-Then:
+* Run your program
 
-```bash
-go run . -w        # windowed mode
-go run . -w -s 1   # windowed, subject ID = 1
-```
 
----
-
-## Installation
-
-Download and install Go from <https://go.dev>, then:
-
-```bash
-git clone https://github.com/chrplr/goxpyriment.git
-cd goxpyriment
-make examples   # compiles all examples into _build/
-```
-
-You can also run examples directly from source:
-
-```bash
-go run examples/Stroop_task/main.go -w -s 1
-```
+    ```bash
+    go run .
+    ```
 
 ---
 
-## Ready-to-run demos
+## Ready-to-run experiments
 
-Pre-built binaries for Windows, macOS, and Linux are available on the
+Pre-built binaries (ready-to run apps) of many experiment are available for Windows, macOS, and Linux on the
 [Releases page](https://github.com/chrplr/goxpyriment/releases).
 
 ---
@@ -113,7 +111,7 @@ It was inspired by [expyriment.org](https://github.com/expyriment/expyriment), a
 GNU GPL v3 — see [LICENSE](https://github.com/chrplr/goxpyriment/blob/main/LICENSE.txt).
 
 Please cite as:
-> Christophe Pallier (2026) chrplr/goxpyriment: Goxpyriment vX.Y.Z. Zenodo. https://doi.org/10.5281/zenodo.19200598
-> *(update the version number)*
+> Christophe Pallier (2026) chrplr/goxpyriment. Zenodo. https://doi.org/10.5281/zenodo.19200598
 
-Christophe Pallier, 2026.
+
+[Christophe Pallier](http://github.com/chrplr), 2026.
