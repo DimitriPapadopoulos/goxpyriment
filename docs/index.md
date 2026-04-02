@@ -93,8 +93,7 @@ Then, to go further:
 
 ## Ready-to-run experiments
 
-Pre-built binaries (ready-to run apps) of many experiment are available for Windows, macOS, and Linux on the
-[Releases page](https://github.com/chrplr/goxpyriment/releases).
+[Pre-built binaries](pre-built-examples.md) (ready-to run apps) of many experimentis are available for Windows, macOS, and Linux.
 
 ---
 
