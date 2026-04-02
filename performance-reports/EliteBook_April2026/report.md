@@ -3,7 +3,7 @@
 > **Date:** 2026-04-02 
 > **Framework:** [goxpyriment](http://chrplr.github.io/goxpyriment) 
 > **Timing instrument:** [Black Box Toolkit v3 (BBTKv3)](https://www.blackboxtoolkit.com/bbtkv3.html)  
-> **Script of timing analysis:** [timing_analysis.ipynb](./timing_analysis.ipynb)
+> **Script for timing analysis:** [timing_analysis.ipynb](./timing_analysis.ipynb)
 ---
 
 ## Overview
