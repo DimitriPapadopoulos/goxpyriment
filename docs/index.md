@@ -24,7 +24,7 @@ OD> 💡 **TIP:* _AI assisted coding_ After cloning the repository, launch an AI
 
 ## Documentation
 
-You can start by downloading [goxpyriment-paper.pdf](https://github.com/chrplr/goxpyriment/tree/main/goxpryriment-paper.pdf)] which describes the goals and features of the framework. 
+It is recommended to start by skimming over [goxpyriment-paper.pdf](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment_paper.pdf) which describes the goals and features of the framework. 
 
 Then, to go further:
 
