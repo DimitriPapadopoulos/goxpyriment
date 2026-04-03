@@ -7,22 +7,35 @@ PsychoPy timing tests — counterpart to the goxpyriment Timing-Tests binary.
 Implements the same sub-tests and prints statistics in the same format so
 results can be compared directly between the two frameworks.
 
-Sub-tests
----------
-  jitter   Pure frame-interval statistics       (no hardware needed)
-  frames   Alternating luminance cycles          (photodiode recommended)
-  flash    Single-frame bright flashes           (photodiode recommended)
-  av       Audio-visual synchrony                (oscilloscope recommended)
-  square   DLP-IO8-G square wave                 (DLP-IO8-G + oscilloscope required)
-  sound    Tone stream onset-jitter              (no hardware needed)
-  rt       Keyboard reaction time                (keyboard required)
-  drain    Audio pipeline latency                (no hardware needed)
+Sub-tests (four tiers — run in this order)
+------------------------------------------
+Tier 0 — sanity check (no equipment, no measurement):
+  check    Verify display flash and audio output   (alias: audio)
+
+Tier 1 — self-contained measurements (computer only):
+  display  Frame-interval statistics and true refresh rate  (alias: jitter)
+  latency  Audio pipeline latency                           (alias: drain)
+  stream   Sequential-stimulus (RSVP) onset/duration accuracy + triggers
+  vrr      Variable Refresh Rate sweep: 1 ms to N ms in 1 ms steps
+
+Tier 2 — trigger device characterisation (DLP-IO8-G + oscilloscope):
+  trigger  Square-wave output for DLP-IO8-G precision test  (alias: square)
+
+Tier 3 — stimulus timing validation (photodiode + oscilloscope):
+  frames   Alternating luminance: visual onset vs. trigger alignment
+  flash    Single-frame white flashes: minimum stimulus duration
+  tones    Regular tone stream: audio onset jitter over time  (alias: sound)
+  av       Audio-visual synchrony with controllable SOA
+
+Tier 4 — response timing:
+  rt       Keyboard reaction-time precision test
 
 Usage
 -----
-  python timing_tests.py --test jitter [options]
+  python timing_tests.py --test display [options]
   python timing_tests.py --test rt --cycles 60 -d
   python timing_tests.py --test frames --level-a 0 --level-b 255 --frames-per-phase 2 --cycles 120
+  python timing_tests.py --test vrr --vrr-max-ms 40 --cycles 10
 
 Timing notes
 ------------
@@ -39,14 +52,20 @@ With psychtoolbox installed (pip install psychtoolbox), events are timestamped
 at hardware-interrupt time (matching goxpyriment's SDL3 nanosecond clock).
 Without psychtoolbox, timestamps reflect Python poll-loop time (~1–5 ms jitter).
 
-For the drain test, sounddevice.wait() is used to detect when the audio driver
+For the latency test, sounddevice.wait() is used to detect when the audio driver
 has consumed all queued PCM data — the Python equivalent of SDL's stream.Queued()==0.
+
+For the vrr test, win.waitBlanking is set to False for the duration so that
+win.flip() returns immediately without waiting for VSYNC, matching SDL's
+SDL_RENDERER_VSYNC_DISABLED.  On a VRR-capable monitor the panel dynamically
+adjusts its refresh interval; on a fixed-rate display errors cluster at frame
+multiples.
 
 DLP-IO8-G trigger device
 ------------------------
-Trigger output is optional for frames/flash/av/sound/rt.  It is required for
-square.  The same ASCII command protocol as goxpyriment's triggers/dlpio8.go
-is used:
+Trigger output is optional for frames/flash/av/tones/rt/stream/vrr.  It is
+required for trigger (square).  The same ASCII command protocol as
+goxpyriment's triggers/dlpio8.go is used:
   Set HIGH pin N : '1'–'8'
   Set LOW  pin N : 'Q','W','E','R','T','Y','U','I'
   Ping           : "'" → device responds 'Q'
@@ -144,16 +163,27 @@ def setup_trigger(port: str | None, pin: int) -> tuple:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+_ALL_TESTS = [
+    # primary names
+    "check", "display", "latency", "stream", "vrr",
+    "trigger", "frames", "flash", "tones", "av", "rt",
+    # legacy aliases
+    "audio", "jitter", "drain", "square", "sound",
+]
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--test", required=True,
-                   choices=["frames", "flash", "av", "jitter",
-                            "square", "sound", "rt", "drain"],
+                   choices=_ALL_TESTS,
                    metavar="TEST",
-                   help="Sub-test: frames|flash|av|jitter|square|sound|rt|drain")
+                   help=("Sub-test: check|display|latency|stream|vrr|"
+                         "trigger|frames|flash|tones|av|rt  "
+                         "(legacy aliases: audio=check  jitter=display  "
+                         "drain=latency  square=trigger  sound=tones)"))
     p.add_argument("-d", action="store_true",
                    help="Windowed 1024×768 developer mode (default: fullscreen)")
     p.add_argument("--screen", type=int, default=0,
@@ -197,9 +227,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Square-wave period ms (default: 100)")
     p.add_argument("--duty", type=float, default=50.0,
                    help="Square-wave duty cycle %% (default: 50)")
-    # drain
+    # drain / latency
     p.add_argument("--drain-reps", type=int, default=10, dest="drain_reps",
                    help="Repetitions per tone duration (default: 10)")
+    # vrr
+    p.add_argument("--vrr-max-ms", type=int, default=50, dest="vrr_max_ms",
+                   help="Maximum sweep duration in ms for vrr test (default: 50)")
     return p
 
 
@@ -881,6 +914,265 @@ def run_drain(win, args) -> None:
             break
 
 
+# ── Test: check ───────────────────────────────────────────────────────────────
+
+def run_check(win, args) -> None:
+    """
+    Combined display and audio sanity check — no measurement, no equipment needed.
+
+    Shows a bright white screen for 1 second (watch for the flash on the monitor),
+    then plays a buzzer followed by a ping (listen through speakers/headphones).
+
+    Matches: go run main.go -test check [-d]
+    """
+    print("check: verifying display and audio output"
+          " — watch for a bright flash, then listen for two sounds")
+
+    # ── Step 1: bright flash ──────────────────────────────────────────────────
+    label = visual.TextStim(
+        win,
+        text="DISPLAY CHECK — you should see this bright screen for ~1 second.",
+        height=24, color=[-1, -1, -1])  # black text on white background
+    win.color = [1, 1, 1]
+    label.draw()
+    win.flip()
+    core.wait(1.0)
+
+    # Brief dark transition so the boundary is clearly visible.
+    win.color = [-1, -1, -1]
+    win.flip()
+    core.wait(0.3)
+
+    # ── Step 2: buzzer ────────────────────────────────────────────────────────
+    msg1 = visual.TextStim(win, text="AUDIO CHECK — listen for a buzzer…",
+                           height=24, color=[1, 1, 1])
+    win.color = [-1, -1, -1]
+    msg1.draw()
+    win.flip()
+    print("check: playing buzzer…")
+    buzzer = sound.Sound(value=200, secs=0.5, volume=0.8)
+    buzzer.play()
+    core.wait(1.0)
+
+    # ── Step 3: ping ──────────────────────────────────────────────────────────
+    msg2 = visual.TextStim(win, text="AUDIO CHECK — …then a ping.",
+                           height=24, color=[1, 1, 1])
+    win.color = [-1, -1, -1]
+    msg2.draw()
+    win.flip()
+    print("check: playing ping…")
+    ping = sound.Sound(value=880, secs=0.1, volume=0.8)
+    ping.play()
+    core.wait(1.0)
+
+    print("check: done. Did you see the bright flash and hear both sounds?"
+          " If yes, proceed to the measurement tests.")
+
+
+# ── Test: stream ───────────────────────────────────────────────────────────────
+
+def run_stream(win, trig, args) -> None:
+    """
+    Measure timing accuracy of sequential (RSVP-style) stimulus presentations.
+
+    Each element: args.frames_per_phase bright frames then args.isi_frames dark
+    frames.  Two statistics are reported:
+      - Duration error  : actual on-duration − target on-duration (ms)
+      - SOA error       : actual onset-to-onset interval − target SOA (ms)
+
+    First args.warmup elements are excluded from statistics (GPU pipeline warm-up).
+
+    If a DLP-IO8-G is connected, a trigger pulse is sent at the onset of every
+    bright phase so software timestamps can be validated against a photodiode.
+
+    Matches: go run main.go -test stream -cycles N -frames-per-phase N
+             -isi-frames N -hz N -warmup N [-d]
+    """
+    on_frames = args.frames_per_phase
+    off_frames = args.isi_frames
+    target_frame_ms = 1000.0 / args.hz
+    target_on_ms = on_frames * target_frame_ms
+    target_off_ms = off_frames * target_frame_ms
+    target_soa_ms = target_on_ms + target_off_ms
+    n = args.cycles
+    is_null = isinstance(trig, NullTrigger)
+
+    print(f"stream: {n} elements  on={on_frames} frames ({target_on_ms:.2f} ms)"
+          f"  off={off_frames} frames ({target_off_ms:.2f} ms)"
+          f"  SOA={target_soa_ms:.2f} ms  hz={args.hz:.2f}  warmup={args.warmup}"
+          + (f"  trigger pin {args.trigger_pin} ({args.trigger_ms} ms pulse)"
+             if not is_null else ""))
+
+    col_a = level_to_psychopy(args.level_a)
+    col_b = level_to_psychopy(args.level_b)
+
+    status = visual.TextStim(
+        win,
+        text=(f"Stream timing: {n} elements, {on_frames} on / {off_frames} off frames"
+              " — press ESC to stop"),
+        height=24, color=[1, 1, 1])
+    status.draw()
+    win.flip()
+    core.wait(0.5)
+
+    duration_errors: list[float] = []
+    interval_errors: list[float] = []
+    prev_onset_t: float | None = None
+
+    gc.disable()
+    try:
+        for elem in range(n):
+            # ── ON phase ──────────────────────────────────────────────────────
+            if not is_null:
+                trig.set_high(args.trigger_pin)
+
+            t_onset: float | None = None
+            for f in range(on_frames):
+                win.color = [col_b, col_b, col_b]
+                t_flip = _flip(win)
+                if f == 0:
+                    t_onset = t_flip
+                    if not is_null:
+                        trigger_pulse_async(trig, args.trigger_pin,
+                                            args.trigger_ms / 1000)
+
+            # ── OFF phase (ISI) ───────────────────────────────────────────────
+            t_offset: float | None = None
+            for f in range(off_frames):
+                win.color = [col_a, col_a, col_a]
+                t_flip = _flip(win)
+                if f == 0:
+                    t_offset = t_flip
+
+            # ── Statistics ────────────────────────────────────────────────────
+            duration_ms = (t_offset - t_onset) * 1000
+            duration_error = duration_ms - target_on_ms
+
+            interval_ms = 0.0
+            interval_error = 0.0
+            if prev_onset_t is not None:
+                interval_ms = (t_onset - prev_onset_t) * 1000
+                interval_error = interval_ms - target_soa_ms
+                if elem >= args.warmup:
+                    interval_errors.append(interval_error)
+
+            if elem >= args.warmup:
+                duration_errors.append(duration_error)
+
+            prev_onset_t = t_onset
+
+            if event.getKeys(keyList=["escape"]):
+                print("  (stopped early by ESC)")
+                break
+    finally:
+        gc.enable()
+
+    print_stats(f"Duration error (target {target_on_ms:.2f} ms)",
+                compute_stats(duration_errors, 0), 0)
+    if interval_errors:
+        print_stats(f"SOA error (target {target_soa_ms:.2f} ms)",
+                    compute_stats(interval_errors, 0), 0)
+
+
+# ── Test: vrr ─────────────────────────────────────────────────────────────────
+
+def run_vrr(win, trig, args) -> None:
+    """
+    VRR (Variable Refresh Rate) sweep: present stimuli for 1 ms to vrr_max_ms in
+    1 ms steps, args.cycles reps per step, with VSync disabled.
+
+    On a VRR-capable monitor, duration errors should be small (<0.5 ms) across
+    the entire sweep, confirming arbitrary-duration stimulus presentation works.
+    On a non-VRR display, errors cluster at multiples of the frame period (±half
+    a frame).  VRR panels have a supported refresh range (e.g. 48–144 Hz =
+    6.9–20.8 ms); outside this range the panel reverts to fixed-rate behaviour,
+    revealing the VRR window directly from the data.
+
+    VSync is disabled via win.waitBlanking = False for the duration of the test
+    (restored on exit), matching SDL's SDL_RENDERER_VSYNC_DISABLED.
+
+    Matches: go run main.go -test vrr -vrr-max-ms N -cycles N [-d]
+    """
+    max_ms = args.vrr_max_ms
+    reps = args.cycles
+    is_null = isinstance(trig, NullTrigger)
+    trig_dur_s = args.trigger_ms / 1000.0
+
+    print(f"vrr: sweep 1–{max_ms} ms in 1 ms steps  reps={reps}"
+          f"  level-a={args.level_a}  level-b={args.level_b}"
+          + (f"  trigger pin {args.trigger_pin} ({args.trigger_ms} ms pulse)"
+             if not is_null else ""))
+    print("vrr: disabling VSync — use a VRR-capable monitor for meaningful sub-frame durations")
+
+    col_a = level_to_psychopy(args.level_a)
+    col_b = level_to_psychopy(args.level_b)
+
+    win.waitBlanking = False  # disable VSync — flip() returns immediately
+    # Let the driver settle after the change.
+    core.wait(0.1)
+
+    status = visual.TextStim(
+        win,
+        text=f"VRR sweep: 1–{max_ms} ms, {reps} reps — press ESC to stop",
+        height=24, color=[1, 1, 1])
+    status.draw()
+    win.flip()
+    core.wait(0.5)
+
+    gc.disable()
+    aborted = False
+    try:
+        for target_ms in range(1, max_ms + 1):
+            target_s = target_ms / 1000.0
+            duration_errors: list[float] = []
+
+            for rep in range(reps):
+                # ── ISI: blank screen ────────────────────────────────────────
+                win.color = [col_a, col_a, col_a]
+                win.flip()
+                core.wait(0.2)
+
+                # ── Onset: bright screen ─────────────────────────────────────
+                if not is_null:
+                    trig.set_high(args.trigger_pin)
+                win.color = [col_b, col_b, col_b]
+                t_onset = _flip(win)
+
+                # ── Hold for exactly target_s using busy-wait ─────────────────
+                sleep_until(t_onset + target_s)
+
+                # ── Offset: blank screen ─────────────────────────────────────
+                win.color = [col_a, col_a, col_a]
+                t_offset = _flip(win)
+
+                if not is_null:
+                    trigger_pulse_async(trig, args.trigger_pin, trig_dur_s)
+
+                # ── Log ───────────────────────────────────────────────────────
+                actual_ms = (t_offset - t_onset) * 1000
+                duration_error = actual_ms - target_ms
+                duration_errors.append(duration_error)
+
+                print(f"  {target_ms:3d} ms  rep {rep:2d}:"
+                      f"  actual={actual_ms:6.3f} ms  error={duration_error:+6.3f} ms")
+
+                if event.getKeys(keyList=["escape"]):
+                    print("  (stopped early by ESC)")
+                    aborted = True
+                    break
+
+            s = compute_stats(duration_errors, 0)
+            if s:
+                print(f"── {target_ms:3d} ms: mean={s['mean']:+.3f} ms  SD={s['sd']:.3f} ms")
+
+            if aborted:
+                break
+    finally:
+        gc.enable()
+        win.waitBlanking = True
+        print("vrr: VSync re-enabled")
+
+
 # ── Window factory ─────────────────────────────────────────────────────────────
 
 def make_window(args) -> visual.Window:
@@ -908,31 +1200,54 @@ def make_window(args) -> visual.Window:
 
 def main() -> None:
     args = build_parser().parse_args()
+
+    # Resolve legacy aliases to their canonical names.
+    _aliases = {
+        "audio": "check",
+        "jitter": "display",
+        "drain": "latency",
+        "square": "trigger",
+        "sound": "tones",
+    }
+    test = _aliases.get(args.test, args.test)
+
     win = make_window(args)
 
-    needs_trigger = args.test in ("frames", "flash", "av", "square", "sound", "rt")
+    needs_trigger = test in ("check", "frames", "flash", "av", "trigger",
+                             "tones", "rt", "stream", "vrr")
     trig: DLPIO8 | NullTrigger = NullTrigger()
     if needs_trigger:
         trig, _ = setup_trigger(args.port, args.trigger_pin)
 
     try:
-        match args.test:
-            case "jitter":
+        match test:
+            # ── Tier 0: sanity check ─────────────────────────────────────────
+            case "check":
+                run_check(win, args)
+            # ── Tier 1: self-contained measurements ──────────────────────────
+            case "display":
                 run_jitter(win, args)
+            case "latency":
+                run_drain(win, args)
+            case "stream":
+                run_stream(win, trig, args)
+            case "vrr":
+                run_vrr(win, trig, args)
+            # ── Tier 2: trigger device characterisation ───────────────────────
+            case "trigger":
+                run_square(win, trig, args)
+            # ── Tier 3: stimulus timing validation ────────────────────────────
             case "frames":
                 run_frames(win, trig, args)
             case "flash":
                 run_flash(win, trig, args)
+            case "tones":
+                run_sound(win, trig, args)
             case "av":
                 run_av(win, trig, args)
-            case "square":
-                run_square(win, trig, args)
-            case "sound":
-                run_sound(win, trig, args)
+            # ── Tier 4: response timing ───────────────────────────────────────
             case "rt":
                 run_rt(win, trig, args)
-            case "drain":
-                run_drain(win, args)
     finally:
         trig.close()
         win.close()
