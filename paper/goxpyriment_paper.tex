@@ -1,8 +1,3 @@
-% Options for packages loaded elsewhere
-%\PassOptionsToPackage{unicode}{hyperref}
-%\PassOptionsToPackage{hyphens}{url}
-%\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
-%
 \documentclass[doc,a4paper]{apa7}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -18,12 +13,12 @@
 \usepackage{array}
 \usepackage{calc} % for calculating minipage widths
 \usepackage{etoolbox}
-\makeatletter
-\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
-\makeatother
-% Allow footnotes in longtable head/foot
-\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
-\makesavenoteenv{longtable}
+% \makeatletter
+% \patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+% \makeatother
+% % Allow footnotes in longtable head/foot
+% \IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+% \makesavenoteenv{longtable}
 \setlength{\emergencystretch}{3em} % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
@@ -105,37 +100,46 @@ frameworks such as jsPsych \parencite{deleeuw2015, deleeuw2023} and
 lab.js \parencite{henninger2022} have enabled large-scale online data
 collection.
 
-Each class of tool involves tradeoffs. MATLAB, with hooks to custom
-written C/C++ libraries (e.g. the Psychtoolbox), offers good
-timing on well-configured hardware but is proprietary and
-expensive. Psychtoolbox scripts written on Windows often do not work
-out of the box on Linux (and vice-versa). Python tools provide an open, flexible
-programming environment with a large scientific ecosystem, but they
-introduce two practical difficulties.  First, deploying an experiment
-to a computer that does not already have a compatible Python
-environment requires package management (conda, pip, venv) and can be
-a source of breakage across operating-system versions. For example, installing
-the psychopy python module under Linux often crashes while attempting to compile the wxPython
-package when there is no precompiled wheel.  Second, Python's garbage
-collector can introduce unpredictable pause times that corrupt the
-timing of stimulus presentation and response recording during the
-critical trial loop. Web-based tools trade timing precision for
-accessibility: browser-mediated stimulus presentation is subject to
-event-loop latency that make sub-frame timing difficult or
-impossible \parencite{bridges2020, anwylirvine2021}.
+Each class of tool involves tradeoffs. MATLAB, extended with
+specialized C/C++ libraries (e.g. the Psychtoolbox), can offer good
+timing on well-configured hardware. Yet Psychtoolbox scripts written
+on Windows often do not work out of the box on Linux (and
+vice-versa). MATLAB can also quite expensive if you one obtain
+academic licenses (as is the case in research institutions that do not
+deliver diplomas).  Python tools provide a more open, flexible
+programming environment with a large scientific
+ecosystem. Python-based experiments can achieve high-precision timing,
+for example by relying on the psychtoolbox python module which
+provides pieces of the Psychtoolbox-3 (See
+\url{https://pypi.org/project/psychtoolbox/}). However, the use of
+Python introduces practical difficulties.  First, deploying an
+experiment to a computer that does not already have a compatible
+Python environment requires package management (conda, pip, venv) and
+can be a source of breakage across operating-system versions. For
+example, installing the psychopy python module under Linux often
+crashes while attempting to compile the wxPython package when there is
+no precompiled wheel.  Second, Python's garbage collector can
+introduce unpredictable pause times that corrupt the timing of
+stimulus presentation and response recording during the critical trial
+loop. Web-based tools trade timing precision for accessibility:
+browser-mediated stimulus presentation is subject to event-loop
+latency that make sub-frame timing difficult or impossible
+\parencite{bridges2020, anwylirvine2021}.
 
 The Go programming language \parencite{donovan2016} offers a different
-point in the design space. It was designed for simplicity and has much
-fewer moving parts than Python; as a consequence, the code tends to be
-more ``boring'' (there is only one way to do things) but
-predictable. Because Go is strongly typed, and favors error checking,
-developping code typically requires less run-time debugging. Go compiles to native
-machine code for each target platform and produces self-contained
-binaries with no runtime dependencies. Its garbage collector is
-concurrent and can be suspended for the duration of a timing-critical
-section.  These properties make it an attractive substrate for a
-behavioral experiment library that prioritizes timing reliability and
-deployment simplicity.
+perspective. Designed from the ground up for simplicity, Go has fewer
+moving parts than Python; as a consequence, the code is often
+described as 'boring' but highly predictable, as the language
+structure typically enforces only one way to solve a given problem. In
+addition, Go is strongly typed, and encourage error checking. This
+translate into less run-time debugging. Another interesting feature of
+Go is that it (cross-)compiles to native machine code for each target
+platform and can produce self-contained binaries, which can embed the
+stimuli, expeiment lists, and this have no runtime dependencies. Its
+garbage collector is concurrent and can be suspended for the duration
+of a timing-critical section.  These properties make it an attractive
+basis for a behavioral experiment library that prioritizes timing
+reliability and deployment simplicity.
 
 The present article describes the design and capabilities of
 \texttt{goxpyriment}, discusses its timing architecture, and situates it
@@ -186,15 +190,108 @@ even run.
 
 \subsubsection{Hardware-Synchronized Presentation}\label{hardware-sync}
 
-While many Python-based experiment frameworks achieve high-precision timing by
-relying on external C/C++ engines like the Psychophysics Toolbox (PTB),
-\texttt{goxpyriment} achieves equivalent low-level control directly through the
+
+
+\texttt{goxpyriment} achieves equivalent low-level control through the
 native SDL3 API \parencite{sdl3}. \texttt{screen.Update()} calls
 SDL's \texttt{SDL\_RenderPresent}, which blocks until the display's
-vertical retrace when VSYNC is enabled. Reliance on SDL3 also provides
-the possibility to control \textit{variable refresh rate} monitors
-(although the goxpyriment API itself does not currently wrap this SDL3
-functionality.)
+vertical retrace when VSYNC is enabled. Variable refresh rate (VRR) monitors
+are also supported, as described in the following section.
+
+\subsubsection{Display Compositor Bypass}\label{compositor-bypass}
+
+A compositing window manager (compositor) intercepts every application frame
+and blends it with other on-screen elements before sending the result to the
+display. This introduces additional latency and jitter that are problematic for
+millisecond-accurate stimulus presentation. The degree to which
+\texttt{goxpyriment} can avoid this overhead depends on the operating system.
+
+On \textbf{Linux with X11}, SDL3 automatically sets the
+\texttt{\_NET\_WM\_BYPASS\_COMPOSITOR} window property when the application
+enters fullscreen mode. Compliant compositors (KWin, Mutter, Compton) respond
+by \emph{unredirecting} the fullscreen window---routing its framebuffer directly
+to the display scan-out pipeline without compositing. The result is presentation
+latency below 1~ms, comparable to a compositor-free session.
+On \textbf{Linux with Wayland}, the compositor is always the intermediary for
+frame delivery, but modern compositors (KWin~5.21+, GNOME Mutter 44+) support
+\emph{direct scan-out} for fullscreen applications, achieving similar low-latency
+behavior in practice. The best achievable timing on Linux is obtained by running
+without any display server: setting the environment variable
+\texttt{SDL\_VIDEO\_DRIVER=kmsdrm} before launching the experiment directs SDL3
+to communicate with the Linux KMS/DRM subsystem directly, bypassing X11 and
+Wayland entirely. This configuration---typically used from a virtual terminal
+(\texttt{Ctrl+Alt+F2})---is recommended for the most demanding timing
+requirements such as single-frame subliminal stimulation or high-frequency RSVP.
+
+On \textbf{Windows}, SDL3's fullscreen mode creates an exclusive fullscreen
+surface that bypasses the Desktop Window Manager (DWM), again yielding
+frame-interval jitter typically below 0.3~ms (one standard deviation), comparable to Linux.
+
+\textbf{macOS} is the exception. Apple's Metal rendering pipeline always
+delivers frames to the display through the WindowServer compositor, and no
+third-party application can bypass it---even in fullscreen. The WindowServer
+typically adds one frame of fixed latency (8--17~ms depending on refresh rate)
+and 2--5~ms of frame-interval jitter. This onset uncertainty — larger than many
+SOAs of experimental interest — makes macOS unsuitable for production data
+collection. Researchers should prefer Linux or Windows hardware for laboratory
+deployments of \texttt{goxpyriment}; macOS is adequate for pilot testing
+and paradigm development.
+
+These platform differences can be quantified empirically with the
+\texttt{display} and \texttt{frames} sub-tests of the bundled
+\texttt{Timing-Tests} suite.
+
+\subsubsection{Variable Refresh Rate (VRR) Stimulus Presentation}\label{vrr}
+
+Standard displays refresh at a fixed rate (e.g., 60~Hz), which quantises
+every stimulus duration to multiples of the frame period (16.67~ms at 60~Hz).
+A researcher wishing to present a stimulus for 10~ms, 17~ms, or 23~ms cannot
+do so on such a display without relying on temporal dithering or hardware
+frame-blending techniques that introduce their own artefacts.
+Variable Refresh Rate (VRR) technology---marketed as AMD FreeSync, NVIDIA
+G-Sync, or the VESA Adaptive-Sync standard---removes this constraint by
+allowing the display to hold each frame for an arbitrary duration and refresh
+only when instructed to do so by the GPU.
+
+\texttt{goxpyriment} exposes VRR through a single API call:
+\texttt{exp.Screen.SetVSync(0)} disables the VSYNC block, so that every
+subsequent \texttt{SDL\_RenderPresent} call returns immediately.
+The following pattern then achieves arbitrary stimulus durations with
+duration error typically below 0.5~ms (one standard deviation):
+
+\begin{enumerate}
+  \item Draw the stimulus and call \texttt{screen.FlipNS()}, which presents
+        the frame and records \texttt{onsetNS} (an SDL nanosecond timestamp)
+        immediately after \texttt{Present()} returns.
+  \item Busy-wait for the desired duration \(d\): spin until
+        \(\texttt{time.Now()} \geq \texttt{onset} + d\).
+        The last \(\sim500\,\mu s\) use a CPU spin loop (already
+        used in the trigger timing routines) to eliminate OS scheduling
+        jitter.
+  \item Draw the blank screen, call \texttt{FlipNS()} again to record
+        \texttt{offsetNS}.
+\end{enumerate}
+
+The actual software-controlled duration is
+\((\texttt{offsetNS}-\texttt{onsetNS})/10^6\,ms\).  On a VRR-capable
+display this equals the true on-screen duration plus a small, constant
+hardware pipeline latency (GPU scan-out and panel response, typically
+1--5~ms) that can be calibrated once with a photodiode using the
+\texttt{frames} timing sub-test of the \texttt{Timing-Tests} suite.
+
+Every VRR panel supports VRR only within a finite refresh-rate window
+(e.g., 48--144~Hz, corresponding to frame durations of 6.9--20.8~ms for a
+typical gaming monitor). Durations outside this window cause the panel to
+revert to fixed-rate behaviour, re-introducing quantisation. The
+\texttt{Timing-Tests} suite includes a dedicated \texttt{vrr} sub-test that
+sweeps target durations from 1~ms to a user-specified maximum in 1~ms steps
+and reports duration errors at each step, directly revealing the panel's VRR
+window in the output data.
+
+On a display without VRR support, disabling VSYNC produces frame tearing.
+The \texttt{vrr} sub-test detects this automatically: on a non-VRR display the
+duration errors cluster at multiples of the frame period rather than being
+uniformly small, providing an unambiguous diagnostic.
 
 \subsubsection{High-Precision Streams}\label{high-precision-streams}
 
@@ -313,8 +410,8 @@ Execution & Native binary & Interpreter & Interpreter & Browser \\
 Deployment & Single binary & pip/conda env & Standalone app or pip &
 Node.js or CDN \\
 GC control & Explicit disable & No & No & No \\
-VSYNC sync & Yes (SDL3) & Yes (Pygame/SDL2) & Yes (Pyglet/PTB) & Limited
-(rAF) \\
+VSYNC sync & Yes (SDL3) & Yes (Pygame/SDL2) & Yes (Pyglet/PTB) & Limited (rAF) \\
+VRR / arbitrary durations & Yes (\texttt{SetVSync(0)}) & No & No & No \\
 Hardware triggers & Yes & Yes & Yes & No \\
 Response device API & Yes & Device-specific & Device-specific & N/A \\
 Event timestamp source & SDL3 hardware & Python \texttt{time.time()} & iohub or Python clock & \texttt{performance.now()} \\

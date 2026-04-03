@@ -11,7 +11,7 @@ This manual explains the key concepts of the library. It assumes you have read t
 3. [The Run Loop and Error Handling](#3-the-run-loop-and-error-handling)
 4. [The Coordinate System](#4-the-coordinate-system)
 5. [The Rendering Model](#5-the-rendering-model)
-6. [Timing Architecture](#6-timing-architecture)
+6. [Timing Architecture](#6-timing-architecture) — frame cadence, GC, nanosecond RT, VRR
 7. [Input Handling](#7-input-handling)
 8. [Data Collection](#8-data-collection)
 9. [Stimuli: Lifecycle and Preloading](#9-stimuli-lifecycle-and-preloading)
@@ -348,10 +348,157 @@ Use this decision guide before committing to a timing strategy.
 | Multi-stimulus sequence, RT relative to a specific stimulus | `exp.ShowNS(stim)` + `exp.Keyboard.WaitKeysEventRT(...)` — nanosecond timestamps on the same SDL clock; subtract directly |
 | RSVP or rapid animation (frame-accurate presentation of many items) | `PresentStreamOfImages` / `PresentStreamOfTexts` (Section 10) — GC disabled, VSYNC-locked, full timing log |
 | EEG/MEG synchronisation required | Add a TTL pulse via `triggers` immediately after `exp.ShowNS` (Section 15) |
+| Stimulus duration not a multiple of the frame period (e.g. 10 ms, 17 ms) | Variable Refresh Rate mode — see below |
 
-**OS considerations.** On Linux with a compositor-free X11 session, VSYNC flip latency is typically < 1 ms. On macOS and Windows the compositor adds one frame of latency (~8–17 ms depending on refresh rate); stimulus *duration* is still VSYNC-accurate, but the absolute onset time is shifted by one frame. For EEG work, always verify onset timing with a photodiode regardless of OS.
+**OS considerations.** Presentation latency depends heavily on whether the display compositor is active — see the next section. For EEG work, always verify onset timing with a photodiode regardless of OS.
 
 **When in doubt, use `ShowNS` + `WaitKeysEventRT`.** The overhead over `Show` + `WaitKeysRT` is negligible, and you get hardware-precision timestamps at no cost.
+
+### Display compositor bypass
+
+A compositing window manager blends every application frame with other
+on-screen elements before sending the result to the display. This adds latency
+and jitter that can be significant for millisecond-accurate stimulus
+presentation. How much overhead you incur — and whether you can avoid it —
+depends on the operating system.
+
+**Linux / X11 (fullscreen).** SDL3 automatically sets the
+`_NET_WM_BYPASS_COMPOSITOR` window property when the application enters
+fullscreen mode. Compliant compositing WMs (KWin, Mutter, Compton) respond by
+*unredirecting* the fullscreen window: the application's framebuffer is routed
+directly to the display scan-out pipeline without compositing. Presentation
+latency drops below 1 ms — comparable to a compositor-free session. Nothing
+special needs to be done in goxpyriment; running fullscreen (omit `-w`) is
+sufficient.
+
+**Linux / Wayland (fullscreen).** The Wayland compositor is always the
+intermediary for frame delivery, but modern compositors (KWin 5.21+,
+GNOME Mutter 44+) support *direct scan-out* for fullscreen applications,
+which routes the framebuffer to the display hardware with near-zero overhead.
+In practice the latency is similar to X11 bypass, though this depends on
+the compositor version and GPU driver.
+
+**Linux / KMS–DRM (no display server).** The lowest-latency configuration on
+Linux is to run without any display server at all, from a virtual terminal
+(`Ctrl+Alt+F2`). Setting the environment variable `SDL_VIDEO_DRIVER=kmsdrm`
+before launching the experiment directs SDL3 to use the Linux kernel's
+KMS/DRM subsystem directly, bypassing both X11 and Wayland entirely:
+
+```bash
+SDL_VIDEO_DRIVER=kmsdrm go run myexperiment/main.go
+```
+
+This is the recommended configuration for the most demanding timing
+requirements, such as single-frame subliminal stimulation or high-frequency
+RSVP.
+
+**Windows (fullscreen).** SDL3's fullscreen mode creates an exclusive
+fullscreen surface that bypasses the Desktop Window Manager (DWM), yielding
+frame-interval jitter typically below 0.3 ms (one standard deviation), comparable to Linux.
+
+**macOS.** Apple's Metal pipeline always delivers frames through the
+WindowServer compositor, and no third-party application can bypass it — even
+in fullscreen. The WindowServer typically adds one frame of fixed latency
+(8–17 ms depending on refresh rate) and 2–5 ms of frame-interval jitter.
+This onset uncertainty — larger than many SOAs of experimental interest — makes
+macOS unsuitable for production data collection. Researchers should prefer
+Linux or Windows hardware for laboratory deployments; macOS is adequate for
+pilot testing and paradigm development.
+
+These platform differences can be measured empirically with the `display` and
+`frames` sub-tests of the bundled `Timing-Tests` suite (see
+[TimingTests.md](TimingTests.md)).
+
+### Variable Refresh Rate (VRR) — arbitrary stimulus durations
+
+On a standard 60 Hz monitor, every stimulus duration must be a multiple of
+16.67 ms. You cannot present a stimulus for 10 ms or 20 ms — the display
+simply cannot change in between frame boundaries. Variable Refresh Rate
+technology (AMD FreeSync, NVIDIA G-Sync, VESA Adaptive-Sync) removes this
+constraint: the panel holds each frame for exactly as long as the software
+asks, refreshing only when the next `Present()` call arrives.
+
+#### Enabling VRR in goxpyriment
+
+goxpyriment opens the renderer with VSYNC enabled by default, which locks
+every flip to a frame boundary. To enter VRR mode, disable VSYNC before the
+timing-critical section and restore it afterwards:
+
+```go
+// Switch to VRR mode — Present() now returns immediately.
+if err := exp.Screen.SetVSync(0); err != nil {
+    log.Fatalf("VRR not supported: %v", err)
+}
+defer exp.Screen.SetVSync(1) // always restore
+
+// Pre-load stimulus textures before disabling GC.
+stimuli.PreloadVisualOnScreen(exp.Screen, myStim)
+
+old := debug.SetGCPercent(-1)
+defer debug.SetGCPercent(old)
+
+// Draw stimulus and present (returns immediately with VSync=0).
+exp.Screen.Renderer.SetDrawColor(0, 0, 0, 255)
+exp.Screen.Clear()
+myStim.Draw(exp.Screen)
+onsetNS, _ := exp.Screen.FlipNS()
+
+// Hold for exactly targetDur using a busy-wait (sub-ms precision).
+deadline := time.Now().Add(targetDur)
+for time.Now().Before(deadline) { /* spin */ }
+
+// Present blank — the display switches immediately on VRR.
+exp.Screen.Renderer.SetDrawColor(0, 0, 0, 255)
+exp.Screen.Clear()
+offsetNS, _ := exp.Screen.FlipNS()
+
+actualDurMs := float64(offsetNS-onsetNS) / 1e6
+```
+
+`onsetNS` and `offsetNS` are both `sdl.TicksNS()` timestamps on the SDL
+nanosecond clock, captured right after each `Present()` returns. Their
+difference measures the software-controlled stimulus duration. On a VRR
+display this equals the actual on-screen duration plus a small, constant
+hardware pipeline latency (GPU scan-out + panel response, typically 1–5 ms)
+that can be measured independently with the `frames` test and a photodiode.
+
+#### VRR range and self-diagnosis
+
+Every VRR panel has a supported refresh-rate range (e.g. 48–144 Hz on a
+typical gaming monitor). Requesting a duration shorter than `1000/max_Hz` ms
+or longer than `1000/min_Hz` ms takes the panel outside its VRR window; the
+display then falls back to fixed-rate behaviour and durations are again
+quantised to frame multiples.
+
+You can characterise your panel's VRR window empirically with the
+`Timing-Tests` suite:
+
+```bash
+go run tests/Timing-Tests/main.go -test vrr -vrr-max-ms 50 -cycles 5 -w
+```
+
+This sweeps target durations from 1 ms to 50 ms in 1 ms steps and reports
+the actual vs. target duration at each step. Duration errors below 0.5 ms
+across the sweep confirm that VRR is working; large periodic errors confirm
+that VRR is absent or the requested duration is outside the supported range.
+See [TimingTests.md — VRR section](TimingTests.md#vrr--variable-refresh-rate-duration-sweep)
+for detailed interpretation, including how to read the VRR boundary from the
+output and how to enable FreeSync on Linux.
+
+#### Requirements
+
+- A VRR-capable monitor (FreeSync, G-Sync Compatible, or Adaptive-Sync).
+- VRR enabled in the OS display settings (Linux: DRM/KMS or compositor; Windows: Display Settings → Advanced display → Variable refresh rate).
+- The application does not need any special SDL hints; `SetVSync(0)` is sufficient.
+
+#### Note on tearing
+
+On a monitor without VRR, `SetVSync(0)` disables the frame-boundary
+synchronisation entirely and the GPU writes to the framebuffer while the
+display is reading it, producing a horizontal tear line. On a VRR monitor
+this does not happen: the display waits for the GPU's signal before starting
+each new refresh. If your VRR test shows tearing artefacts, VRR is either
+not enabled in your OS or not supported by your hardware.
 
 ---
 

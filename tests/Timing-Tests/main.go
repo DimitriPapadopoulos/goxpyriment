@@ -3,16 +3,34 @@
 //
 // Timing-Tests — hardware timing verification suite
 //
-// Provides eight independent sub-tests, selected with -test <name>:
+// Provides eleven independent sub-tests, selected with -test <name>.
+// Tests are organised in four tiers; run them in this order:
 //
-//	frames  Alternating luminance (photodiode test)
-//	flash   Single-frame white flashes (minimum-duration test)
-//	av      Audio-visual synchrony (oscilloscope + photodiode)
-//	jitter  Pure frame-interval statistics (no external device needed)
-//	square  DLP-IO8 square-wave trigger (oscilloscope only)
-//	sound   Long regular tone stream, onset-jitter statistics
-//	rt      SDL event-timestamp RT precision test (keyboard or response box)
-//	drain   Audio pipeline latency: time from PutData() to stream empty (no external device)
+// Tier 0 — sanity check (no equipment, no measurement):
+//
+//	check   Verify display flash and audio output (replaces old "audio")
+//
+// Tier 1 — self-contained measurements (computer only):
+//
+//	display Frame-interval statistics and true refresh rate  (alias: jitter)
+//	latency Audio pipeline latency — how long does SDL hold PCM?  (alias: drain)
+//	stream  Sequential-stimulus (RSVP) onset / duration accuracy + triggers
+//	vrr     Variable Refresh Rate sweep: 1 ms to N ms in 1 ms steps
+//
+// Tier 2 — trigger device characterisation (DLP-IO8-G + oscilloscope):
+//
+//	trigger Square-wave output for DLP-IO8-G precision test  (alias: square)
+//
+// Tier 3 — stimulus timing validation (photodiode + oscilloscope):
+//
+//	frames  Alternating luminance: visual onset vs. trigger alignment
+//	flash   Single-frame white flashes: minimum stimulus duration
+//	tones   Regular tone stream: audio onset jitter over time  (alias: sound)
+//	av      Audio–visual synchrony with controllable SOA
+//
+// Tier 4 — response timing:
+//
+//	rt      SDL3 event-timestamp reaction-time precision test
 //
 // See README.md for full usage, equipment setup, and interpretation.
 //
@@ -94,7 +112,7 @@ import (
 // ── Flags ─────────────────────────────────────────────────────────────────────
 
 var (
-	fTest           = flag.String("test", "", "Sub-test: frames | flash | av | jitter | square")
+	fTest           = flag.String("test", "", "Sub-test: check | display | latency | stream | vrr | trigger | frames | flash | tones | av | rt\n\t(legacy aliases: jitter=display  drain=latency  square=trigger  sound=tones  audio=check)")
 	fPort           = flag.String("port", "", "Serial port for DLP-IO8-G (empty = auto-detect)")
 	fTriggerPin     = flag.Int("trigger-pin", 1, "DLP-IO8-G output pin (1–8)")
 	fTriggerMs      = flag.Int("trigger-ms", 5, "Trigger pulse duration (ms)")
@@ -114,6 +132,7 @@ var (
 	fHz             = flag.Float64("hz", 60.0, "Expected display refresh rate in Hz; used to compute frame-interval targets [frames / flash]")
 	fWarmup         = flag.Int("warmup", 10, "Frames to discard at the start of visual tests before recording statistics")
 	fDrainReps      = flag.Int("drain-reps", 10, "Repetitions per tone duration [drain test]")
+	fVRRMaxMs       = flag.Int("vrr-max-ms", 50, "Maximum stimulus duration to sweep in VRR test (ms, in 1 ms steps) [vrr test]")
 )
 
 // ── Statistics helper ──────────────────────────────────────────────────────────
@@ -847,6 +866,371 @@ func runRT(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 	})
 }
 
+// ── Test: check ───────────────────────────────────────────────────────────────
+
+// runCheck is a combined go/no-go sanity check for both display and audio.
+// It shows a bright white screen for one second (verify you see a flash on the
+// monitor), then plays a buzzer followed by a ping (verify you hear both
+// sounds through your speakers or headphones).
+// No data is recorded; this is a "does it basically work?" step before running
+// any of the quantitative tests.
+func runCheck(exp *control.Experiment) error {
+	fmt.Println("check: verifying display and audio output — watch for a bright flash, then listen for two sounds")
+	return exp.Run(func() error {
+		// ── Step 1: bright flash on display ───────────────────────────────────
+		label := stimuli.NewTextLine("DISPLAY CHECK — you should see this bright screen for ~1 second.", 0, 0, control.Black)
+		r := exp.Screen.Renderer
+		r.SetDrawColor(255, 255, 255, 255)
+		r.Clear()
+		label.Draw(exp.Screen)
+		exp.Screen.Update()
+		time.Sleep(1 * time.Second)
+
+		// Brief return to dark so the transition is clearly visible.
+		r.SetDrawColor(0, 0, 0, 255)
+		r.Clear()
+		exp.Screen.Update()
+		time.Sleep(300 * time.Millisecond)
+
+		// ── Step 2: buzzer ────────────────────────────────────────────────────
+		msg1 := stimuli.NewTextLine("AUDIO CHECK — listen for a buzzer…", 0, 0, control.White)
+		if err := exp.Show(msg1); err != nil {
+			return err
+		}
+		fmt.Println("check: playing buzzer…")
+		if err := stimuli.PlayBuzzer(exp.AudioDevice); err != nil {
+			log.Printf("check: error playing buzzer: %v", err)
+		}
+		clock.Wait(1000)
+
+		// ── Step 3: ping ──────────────────────────────────────────────────────
+		msg2 := stimuli.NewTextLine("AUDIO CHECK — …then a ping.", 0, 0, control.White)
+		if err := exp.Show(msg2); err != nil {
+			return err
+		}
+		fmt.Println("check: playing ping…")
+		if err := stimuli.PlayPing(exp.AudioDevice); err != nil {
+			log.Printf("check: error playing ping: %v", err)
+		}
+		clock.Wait(1000)
+
+		fmt.Println("check: done. Did you see the bright flash and hear both sounds? If yes, proceed to the measurement tests.")
+		return control.EndLoop
+	})
+}
+
+// ── Test: stream ──────────────────────────────────────────────────────────────
+
+// runStream measures the timing accuracy of sequential (RSVP-style) stimulus
+// presentations — the kind of trial loop a psychologist would actually run in
+// a rapid serial visual presentation paradigm.
+//
+// *fCycles elements are presented. Each element consists of *fFramesPerPhase
+// bright frames (luminance *fLevelB) followed by *fIsiFrames dark frames
+// (luminance *fLevelA). If a DLP-IO8-G is connected, a trigger pulse is fired
+// on *fTriggerPin at the onset of every bright phase so that the software
+// timestamps can be validated against a photodiode on the oscilloscope.
+//
+// Two statistics are reported after the run:
+//   - Duration error  : actual on-duration − target on-duration (ms).
+//     A non-zero mean indicates a systematic off-by-one-frame bug or driver
+//     double-buffering; high SD indicates frame-drop events.
+//   - SOA error       : actual onset-to-onset interval − target SOA (ms).
+//     This is the quantity that matters most for RSVP experiments: if the SOA
+//     is 100 ms but the SD is 3 ms, word presentations drift in and out of
+//     phase with any auditory rhythm you might be synchronising to.
+//
+// The first *fWarmup elements are excluded from statistics (GPU pipeline warm-up).
+func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
+	n := *fCycles
+	onFrames := *fFramesPerPhase
+	offFrames := *fIsiFrames
+	targetFrameMs := 1000.0 / *fHz
+	targetOnMs := float64(onFrames) * targetFrameMs
+	targetOffMs := float64(offFrames) * targetFrameMs
+	targetSOAms := targetOnMs + targetOffMs
+
+	_, isNull := trig.(triggers.NullOutputTTLDevice)
+	trigDur := time.Duration(*fTriggerMs) * time.Millisecond
+
+	fmt.Printf("stream: %d elements  on=%d frames (%.2f ms)  off=%d frames (%.2f ms)  SOA=%.2f ms  hz=%.2f  warmup=%d",
+		n, onFrames, targetOnMs, offFrames, targetOffMs, targetSOAms, *fHz, *fWarmup)
+	if !isNull {
+		fmt.Printf("  trigger pin %d (%d ms pulse)", *fTriggerPin, *fTriggerMs)
+	}
+	fmt.Println()
+
+	exp.Data.WriteComment(fmt.Sprintf(
+		"test=stream cycles=%d frames-per-phase=%d isi-frames=%d hz=%.2f warmup=%d level-a=%d level-b=%d",
+		n, onFrames, offFrames, *fHz, *fWarmup, *fLevelA, *fLevelB))
+	exp.AddDataVariableNames([]string{
+		"element",
+		"t_onset_ms", "t_offset_ms",
+		"onset_ns", "offset_ns",
+		"duration_ms", "duration_error_ms",
+		"interval_ms", "interval_error_ms",
+		"trigger",
+	})
+
+	return exp.Run(func() error {
+		status := stimuli.NewTextLine(
+			fmt.Sprintf("Stream timing: %d elements, %d on / %d off frames — press ESC to stop",
+				n, onFrames, offFrames),
+			0, 0, control.White)
+		if err := exp.Show(status); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+
+		oldGC := debug.SetGCPercent(-1)
+		defer debug.SetGCPercent(oldGC)
+
+		var durationErrors, intervalErrors []float64
+		streamStartMs := float64(clock.GetTimeNS()) / 1e6
+		var prevOnsetNS uint64
+
+		r := exp.Screen.Renderer
+		bR, bG, bB := byte(*fLevelB), byte(*fLevelB), byte(*fLevelB) // bright
+		dR, dG, dD := byte(*fLevelA), byte(*fLevelA), byte(*fLevelA) // dark
+
+		for elem := 0; elem < n; elem++ {
+			// ── ON phase ──────────────────────────────────────────────────────
+			if !isNull {
+				_ = trig.SetHigh(*fTriggerPin)
+			}
+
+			var onsetNS uint64
+			var tOnsetMs float64
+
+			for f := 0; f < onFrames; f++ {
+				r.SetDrawColor(bR, bG, bB, 255)
+				r.Clear()
+				if f == 0 {
+					ns, _ := exp.Screen.FlipNS()
+					onsetNS = ns
+					tOnsetMs = float64(clock.GetTimeNS())/1e6 - streamStartMs
+				} else {
+					exp.Screen.Update()
+				}
+			}
+
+			if !isNull {
+				go func() {
+					time.Sleep(trigDur)
+					_ = trig.SetLow(*fTriggerPin)
+				}()
+			}
+
+			// ── OFF phase (ISI) ───────────────────────────────────────────────
+			var offsetNS uint64
+			var tOffsetMs float64
+
+			for f := 0; f < offFrames; f++ {
+				r.SetDrawColor(dR, dG, dD, 255)
+				r.Clear()
+				if f == 0 {
+					ns, _ := exp.Screen.FlipNS()
+					offsetNS = ns
+					tOffsetMs = float64(clock.GetTimeNS())/1e6 - streamStartMs
+				} else {
+					exp.Screen.Update()
+				}
+			}
+
+			// ── Statistics ────────────────────────────────────────────────────
+			durationMs := tOffsetMs - tOnsetMs
+			durationError := durationMs - targetOnMs
+
+			var intervalMs, intervalError float64
+			if prevOnsetNS > 0 {
+				intervalMs = float64(onsetNS-prevOnsetNS) / 1e6
+				intervalError = intervalMs - targetSOAms
+				if elem >= *fWarmup {
+					intervalErrors = append(intervalErrors, intervalError)
+				}
+			}
+			if elem >= *fWarmup {
+				durationErrors = append(durationErrors, durationError)
+			}
+			prevOnsetNS = onsetNS
+
+			exp.Data.Add(
+				elem,
+				fmt.Sprintf("%.3f", tOnsetMs),
+				fmt.Sprintf("%.3f", tOffsetMs),
+				onsetNS, offsetNS,
+				fmt.Sprintf("%.3f", durationMs),
+				fmt.Sprintf("%.3f", durationError),
+				fmt.Sprintf("%.3f", intervalMs),
+				fmt.Sprintf("%.3f", intervalError),
+				!isNull,
+			)
+
+			state := exp.PollEvents(nil)
+			if state.QuitRequested {
+				return control.EndLoop
+			}
+		}
+
+		printStats(fmt.Sprintf("Duration error (target %.2f ms)", targetOnMs), computeStats(durationErrors, 0), 0)
+		if len(intervalErrors) > 0 {
+			printStats(fmt.Sprintf("SOA error (target %.2f ms)", targetSOAms), computeStats(intervalErrors, 0), 0)
+		}
+		return control.EndLoop
+	})
+}
+
+// ── Test: vrr ─────────────────────────────────────────────────────────────────
+
+// runVRR characterises Variable Refresh Rate (VRR / FreeSync / G-Sync /
+// Adaptive-Sync) stimulus timing by sweeping target durations from 1 ms to
+// *fVRRMaxMs in 1 ms steps, with *fCycles repetitions per step.
+//
+// VSync is disabled for the duration of the test (restored on exit) so that
+// every SDL_RenderPresent call returns immediately without blocking for a
+// VSYNC edge. On a VRR-capable display the panel dynamically adjusts its
+// refresh interval to match the time between consecutive Presents, allowing
+// stimuli to be shown for durations that are NOT multiples of the nominal
+// frame period (e.g. 1 ms, 7 ms, 17 ms, 23 ms).
+//
+// At each repetition:
+//  1. A bright screen is presented; onsetNS = sdl.TicksNS() is captured
+//     immediately after Present() returns.
+//  2. A busy-wait loop (sub-millisecond precision) holds for the target duration.
+//  3. A blank screen is presented; offsetNS = sdl.TicksNS() is captured.
+//  4. actual_ms = (offsetNS − onsetNS) / 1e6.
+//
+// If a DLP-IO8-G is available, a trigger pulse is sent at each onset, allowing
+// the software timestamps to be cross-validated against a photodiode on the
+// oscilloscope.
+//
+// Interpreting the results:
+//   - On a VRR display: duration errors should be small (< 0.5 ms) across the
+//     entire sweep, confirming arbitrary-duration stimulus presentation works.
+//   - On a non-VRR display: duration errors cluster at multiples of the frame
+//     period (±half a frame); the test self-diagnoses the absence of VRR.
+//   - VRR panels have a supported refresh range (e.g. 48–144 Hz = 6.9–20.8 ms).
+//     Outside this range the panel reverts to fixed-rate behaviour: errors grow
+//     sharply at the boundary durations, revealing the VRR window directly from
+//     the CSV data.
+//
+// Note: onsetNS / offsetNS are captured right after Present() returns (GPU
+// submission time), not at photon emission. The full software-to-photon latency
+// is a constant that can be measured independently with the frames test + a
+// photodiode. Because this latency is constant, duration accuracy is not
+// affected by it.
+func runVRR(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
+	maxMs := *fVRRMaxMs
+	reps := *fCycles
+	_, isNull := trig.(triggers.NullOutputTTLDevice)
+	trigDur := time.Duration(*fTriggerMs) * time.Millisecond
+
+	fmt.Printf("vrr: sweep 1–%d ms in 1 ms steps  reps=%d  level-a=%d  level-b=%d",
+		maxMs, reps, *fLevelA, *fLevelB)
+	if !isNull {
+		fmt.Printf("  trigger pin %d (%d ms pulse)", *fTriggerPin, *fTriggerMs)
+	}
+	fmt.Println()
+	fmt.Println("vrr: disabling VSync — use a VRR-capable monitor for meaningful sub-frame durations")
+
+	if err := exp.Screen.SetVSync(0); err != nil {
+		return fmt.Errorf("vrr: could not disable VSync: %w", err)
+	}
+	defer func() {
+		_ = exp.Screen.SetVSync(1)
+		fmt.Println("vrr: VSync re-enabled")
+	}()
+
+	// Let the driver settle after the vsync change.
+	time.Sleep(100 * time.Millisecond)
+
+	exp.Data.WriteComment(fmt.Sprintf(
+		"test=vrr vrr-max-ms=%d cycles=%d level-a=%d level-b=%d",
+		maxMs, reps, *fLevelA, *fLevelB))
+	exp.AddDataVariableNames([]string{
+		"target_ms", "rep",
+		"actual_ms", "duration_error_ms",
+		"onset_ns", "offset_ns",
+		"trigger",
+	})
+
+	return exp.Run(func() error {
+		status := stimuli.NewTextLine(
+			fmt.Sprintf("VRR sweep: 1–%d ms, %d reps — press ESC to stop", maxMs, reps),
+			0, 0, control.White)
+		if err := exp.Show(status); err != nil {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+
+		oldGC := debug.SetGCPercent(-1)
+		defer debug.SetGCPercent(oldGC)
+
+		r := exp.Screen.Renderer
+
+		for targetMs := 1; targetMs <= maxMs; targetMs++ {
+			targetDur := time.Duration(targetMs) * time.Millisecond
+			var durationErrors []float64
+
+			for rep := 0; rep < reps; rep++ {
+				// ── ISI: blank screen ────────────────────────────────────────
+				r.SetDrawColor(byte(*fLevelA), byte(*fLevelA), byte(*fLevelA), 255)
+				r.Clear()
+				exp.Screen.Flip() // non-blocking with vsync=0
+				time.Sleep(200 * time.Millisecond)
+
+				// ── Onset: bright screen ─────────────────────────────────────
+				if !isNull {
+					_ = trig.SetHigh(*fTriggerPin)
+				}
+				r.SetDrawColor(byte(*fLevelB), byte(*fLevelB), byte(*fLevelB), 255)
+				r.Clear()
+				onsetNS, _ := exp.Screen.FlipNS() // returns immediately (vsync=0)
+
+				// ── Hold for exactly targetDur using busy-wait ────────────────
+				sleepUntil(time.Now().Add(targetDur))
+
+				// ── Offset: blank screen ─────────────────────────────────────
+				r.SetDrawColor(byte(*fLevelA), byte(*fLevelA), byte(*fLevelA), 255)
+				r.Clear()
+				offsetNS, _ := exp.Screen.FlipNS()
+
+				if !isNull {
+					go func() {
+						time.Sleep(trigDur)
+						_ = trig.SetLow(*fTriggerPin)
+					}()
+				}
+
+				// ── Log ───────────────────────────────────────────────────────
+				actualMs := float64(offsetNS-onsetNS) / 1e6
+				durationError := actualMs - float64(targetMs)
+				durationErrors = append(durationErrors, durationError)
+
+				exp.Data.Add(
+					targetMs, rep,
+					fmt.Sprintf("%.3f", actualMs),
+					fmt.Sprintf("%.3f", durationError),
+					onsetNS, offsetNS,
+					!isNull,
+				)
+				fmt.Printf("  %3d ms  rep %2d:  actual=%6.3f ms  error=%+6.3f ms\n",
+					targetMs, rep, actualMs, durationError)
+
+				state := exp.PollEvents(nil)
+				if state.QuitRequested {
+					return control.EndLoop
+				}
+			}
+
+			s := computeStats(durationErrors, 0)
+			fmt.Printf("── %3d ms: mean=%+.3f ms  SD=%.3f ms\n", targetMs, s.mean, s.sd)
+		}
+
+		return control.EndLoop
+	})
+}
+
 // ── Test: drain ───────────────────────────────────────────────────────────────
 
 // runDrain measures audio pipeline latency without any external equipment.
@@ -956,7 +1340,8 @@ func main() {
 	defer exp.End()
 
 	if *fTest == "" {
-		log.Fatal("usage: go run main.go -test <frames|flash|av|jitter|square|sound|rt|drain> [flags]")
+		log.Fatal("usage: go run main.go -test <check|display|latency|stream|vrr|trigger|frames|flash|tones|av|rt> [flags]\n" +
+			"       (legacy aliases: jitter=display  drain=latency  square=trigger  sound=tones  audio=check)")
 	}
 
 	// Log actual audio device format so the user can verify the buffer size.
@@ -971,24 +1356,36 @@ func main() {
 
 	var runErr error
 	switch *fTest {
+	// ── Tier 0: sanity check ─────────────────────────────────────────────────
+	case "check", "audio": // "audio" is the legacy name
+		runErr = runCheck(exp)
+	// ── Tier 1: self-contained measurements ──────────────────────────────────
+	case "display", "jitter": // "jitter" is the legacy name
+		runErr = runJitter(exp)
+	case "latency", "drain": // "drain" is the legacy name
+		runErr = runDrain(exp)
+	case "stream":
+		runErr = runStream(exp, trig)
+	case "vrr":
+		runErr = runVRR(exp, trig)
+	// ── Tier 2: trigger device characterisation ───────────────────────────────
+	case "trigger", "square": // "square" is the legacy name
+		runErr = runSquare(exp, trig)
+	// ── Tier 3: stimulus timing validation ───────────────────────────────────
 	case "frames":
 		runErr = runFrames(exp, trig)
 	case "flash":
 		runErr = runFlash(exp, trig)
+	case "tones", "sound": // "sound" is the legacy name
+		runErr = runSound(exp, trig)
 	case "av":
 		runErr = runAV(exp, trig)
-	case "jitter":
-		runErr = runJitter(exp)
-	case "square":
-		runErr = runSquare(exp, trig)
-	case "sound":
-		runErr = runSound(exp, trig)
+	// ── Tier 4: response timing ───────────────────────────────────────────────
 	case "rt":
 		runErr = runRT(exp, trig)
-	case "drain":
-		runErr = runDrain(exp)
 	default:
-		log.Fatalf("unknown test %q — choose from: frames flash av jitter square sound rt drain", *fTest)
+		log.Fatalf("unknown test %q — choose from: check display latency stream vrr trigger frames flash tones av rt\n"+
+			"  (legacy aliases: audio=check  jitter=display  drain=latency  square=trigger  sound=tones)", *fTest)
 	}
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
