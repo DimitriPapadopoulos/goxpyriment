@@ -24,7 +24,7 @@ func GetTime() int64 {
 //
 // NOTE: uses time.Since() (Go monotonic clock), not sdl.TicksNS().
 // These two clocks have different origins; do not subtract GetTimeNS() from
-// SDL event timestamps (Screen.FlipNS, WaitKeysEventRT) to compute reaction
+// SDL event timestamps (Screen.FlipTS, GetKeyEventTS) to compute reaction
 // times. Use the SDL-based functions for RT measurement.
 func GetTimeNS() int64 {
 	return time.Since(startTime).Nanoseconds()
@@ -60,7 +60,7 @@ func (c *Clock) NowMillis() int64 {
 //
 // NOTE: uses time.Since() (Go monotonic clock), not sdl.TicksNS().
 // Do not subtract NowNanos() from SDL event timestamps to compute reaction
-// times. Use Screen.FlipNS + Keyboard.WaitKeysEventRT for that purpose.
+// times. Use Screen.FlipTS + Keyboard.GetKeyEventTS for that purpose.
 func (c *Clock) NowNanos() int64 {
 	return c.Now().Nanoseconds()
 }

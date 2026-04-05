@@ -184,30 +184,30 @@ func (e *Experiment) Show(v stimuli.VisualStimulus) error {
 	return err
 }
 
-// ShowNS presents a visual stimulus (clear + draw + flip) and returns the
+// ShowTS presents a visual stimulus (clear + draw + flip) and returns the
 // SDL3 nanosecond timestamp captured immediately after the VSYNC flip.
 //
 // The timestamp is on the same clock as SDL3 event timestamps, so the
 // reaction time from this stimulus onset is simply:
 //
-//	onset, _ := exp.ShowNS(stim)
-//	key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(keys, -1)
-//	rtNS := int64(eventTS - onset)
-func (e *Experiment) ShowNS(v stimuli.VisualStimulus) (uint64, error) {
+//	onset, _ := exp.ShowTS(stim)
+//	key, keyTS, _ := exp.Keyboard.GetKeyEventTS(keys, -1)
+//	rtNS := int64(keyTS - onset)
+func (e *Experiment) ShowTS(v stimuli.VisualStimulus) (uint64, error) {
 	if err := v.Present(e.Screen, true, false); err != nil {
 		if IsEndLoop(err) {
 			panic(exitPanic{err: err})
 		}
 		return 0, err
 	}
-	ts, err := e.Screen.FlipNS()
+	ts, err := e.Screen.FlipTS()
 	if err != nil {
 		return 0, err
 	}
 	return ts, nil
 }
 
-// WaitAnyEventRT blocks until a matching input event arrives from any device
+// WaitAnyEventTS blocks until a matching input event arrives from any device
 // and returns an InputEvent carrying the SDL3 hardware nanosecond timestamp.
 //
 // keys filters keyboard events: pass nil to accept any key.
@@ -217,13 +217,13 @@ func (e *Experiment) ShowNS(v stimuli.VisualStimulus) (uint64, error) {
 // On timeout, returns a zero InputEvent and nil error.
 // On ESC or window-close, returns sdl.EndLoop.
 //
-// Because TimestampNS is on the same SDL3 nanosecond clock as ShowNS, reaction
+// Because TimestampNS is on the same SDL3 nanosecond clock as ShowTS, reaction
 // time is simply:
 //
-//	onset, _ := exp.ShowNS(stim)
-//	ev, _ := exp.WaitAnyEventRT(keys, true, -1)
+//	onset, _ := exp.ShowTS(stim)
+//	ev, _ := exp.WaitAnyEventTS(keys, true, -1)
 //	rtNS := int64(ev.TimestampNS - onset)
-func (e *Experiment) WaitAnyEventRT(keys []sdl.Keycode, catchMouse bool, timeoutMS int) (apparatus.InputEvent, error) {
+func (e *Experiment) WaitAnyEventTS(keys []sdl.Keycode, catchMouse bool, timeoutMS int) (apparatus.InputEvent, error) {
 	start := sdl.Ticks()
 	for {
 		if timeoutMS >= 0 {
@@ -333,20 +333,34 @@ func (e *Experiment) Blank(ms int) error {
 // Wait blocks for the given number of milliseconds while keeping the OS
 // responsive by pumping SDL events. If a quit event or ESC key is detected
 // during the wait, it panics with an internal sentinel to exit gracefully.
+// pumpFrame pumps OS events for one frame: keeps the window responsive on all
+// platforms (including Wayland), updates input-device state (mouse position,
+// keyboard state), and checks for quit/ESC — all without dequeuing events, so
+// keyboard/mouse events remain in the SDL queue for GetKeyEventTS to consume
+// with their original hardware timestamps.
+//
+// Returns sdl.EndLoop if quit or ESC was detected, nil otherwise.
+func (e *Experiment) pumpFrame() error {
+	sdl.PumpEvents()
+	if sdl.HasEvent(sdl.EVENT_QUIT) {
+		return sdl.EndLoop
+	}
+	kbState := sdl.GetKeyboardState()
+	if len(kbState) > int(sdl.SCANCODE_ESCAPE) && kbState[sdl.SCANCODE_ESCAPE] {
+		return sdl.EndLoop
+	}
+	return nil
+}
+
 func (e *Experiment) Wait(ms int) error {
 	start := getTicks()
 	for {
-		elapsed := int(getTicks() - start)
-		if elapsed >= ms {
+		if elapsed := int(getTicks() - start); elapsed >= ms {
 			return nil
 		}
-
-		// Pump events so the OS stays responsive and ESC is detected promptly.
-		state := e.PollEvents(nil)
-		if state.QuitRequested {
-			panic(exitPanic{err: sdl.EndLoop})
+		if err := e.pumpFrame(); err != nil {
+			panic(exitPanic{err: err})
 		}
-
 		clock.Wait(1)
 	}
 }
@@ -762,6 +776,11 @@ func (e *Experiment) Run(logic func() error) error {
 				}
 			}
 		}()
+		// Pump OS events every frame so the window stays responsive (Wayland,
+		// X11, macOS) and input state is current, without draining the queue.
+		if err := e.pumpFrame(); err != nil {
+			return err
+		}
 		return logic()
 	})
 }

@@ -204,7 +204,7 @@ func generateStream(words [][]string, targetDurMS int64) []string {
 // waitMS waits for the given number of milliseconds, returning an error if ESC
 // is pressed or the experiment loop ends.
 func waitMS(exp *control.Experiment, ms int) error {
-	_, _, err := exp.Keyboard.WaitKeysEventRT(nil, ms)
+	_, _, err := exp.Keyboard.GetKeyEventTS(nil, ms)
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func playSequence(exp *control.Experiment, notes []string, tones map[string]*sti
 		if err := tones[note].Play(); err != nil {
 			return err
 		}
-		_, _, err := exp.Keyboard.WaitKeysEventRT(nil, toneDurMS)
+		_, _, err := exp.Keyboard.GetKeyEventTS(nil, toneDurMS)
 		if err != nil {
 			return err
 		}
@@ -284,7 +284,7 @@ func runAdultExposure(exp *control.Experiment, words [][]string, tones map[strin
 			if err := tones[note].Play(); err != nil {
 				return err
 			}
-			_, _, err := exp.Keyboard.WaitKeysEventRT(nil, toneDurMS)
+			_, _, err := exp.Keyboard.GetKeyEventTS(nil, toneDurMS)
 			if err != nil {
 				return err
 			}
@@ -385,7 +385,7 @@ func run2AFCTest(exp *control.Experiment, pairs []testPair, tones map[string]*st
 		_ = prompt.Draw(exp.Screen)
 		_ = exp.Screen.Update()
 
-		key, _, kErr := exp.Keyboard.WaitKeysEventRT(
+		key, _, kErr := exp.Keyboard.GetKeyEventTS(
 			[]control.Keycode{control.K_1, control.K_2}, -1)
 		if kErr != nil {
 			return kErr
@@ -431,7 +431,7 @@ func runInfantExposure(exp *control.Experiment, words [][]string, tones map[stri
 		if err := tones[note].Play(); err != nil {
 			return err
 		}
-		_, _, err := exp.Keyboard.WaitKeysEventRT(nil, toneDurMS)
+		_, _, err := exp.Keyboard.GetKeyEventTS(nil, toneDurMS)
 		if err != nil {
 			return err
 		}

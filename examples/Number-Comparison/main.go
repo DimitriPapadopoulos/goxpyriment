@@ -400,13 +400,13 @@ func main() {
 				if err := fixCross.Draw(exp.Screen); err != nil {
 					return err
 				}
-				onsetNS, err := exp.Screen.FlipNS()
+				onsetNS, err := exp.Screen.FlipTS()
 				if err != nil {
 					return err
 				}
 
 				// Wait for response (F or J) with timeout.
-				key, eventTS, respErr := exp.Keyboard.WaitKeysEventRT(respKeys, maxRTms)
+				key, eventTS, respErr := exp.Keyboard.GetKeyEventTS(respKeys, maxRTms)
 
 				// Free random textures immediately after response.
 				if leftTex != nil {

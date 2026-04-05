@@ -19,12 +19,12 @@ type Keyboard struct {
 
 	// PollKeysWithTS is like PollKeys but also returns the SDL3 event timestamp
 	// (nanoseconds, same clock as sdl.TicksNS()). Injected by the control layer
-	// alongside PollKeys; used by WaitKeysEventRT.
+	// alongside PollKeys; used by GetKeyEventRT.
 	PollKeysWithTS func() (sdl.Keycode, uint64, bool)
 }
 
 // waitSDLKeyEvent is the shared fallback SDL event loop used by WaitKeys and
-// WaitKeysEventRT when no injected callback is available. It blocks until a
+// GetKeyEventTS when no injected callback is available. It blocks until a
 // matching key, ESC, quit, or timeout.
 //
 // Return values:
@@ -171,8 +171,8 @@ func (k *Keyboard) WaitKey(key sdl.Keycode) error {
 //
 // The RT is a wall-clock elapsed time (sdl.Ticks delta), NOT a hardware event
 // timestamp. For stimulus-onset-locked RT with nanosecond precision, use
-// WaitKeysEventRT instead, which returns the SDL3 KeyboardEvent.Timestamp
-// directly and can be subtracted from a Screen.FlipNS() onset value.
+// GetKeyEventTS instead, which returns the SDL3 KeyboardEvent.Timestamp
+// directly and can be subtracted from a Screen.FlipTS() onset value.
 //
 // This bundles the common three-line pattern:
 //
@@ -186,23 +186,26 @@ func (k *Keyboard) WaitKeysRT(keys []sdl.Keycode, timeoutMS int) (sdl.Keycode, i
 	return key, rt, err
 }
 
-// WaitKeysEventRT waits for one of the specified keys (or any key if keys is
-// nil) and returns both the keycode and the SDL3 event timestamp in
-// nanoseconds (same reference clock as sdl.TicksNS() and Screen.FlipNS()).
+// GetKeyEventTS waits for one of the specified keys (or any key if keys is
+// nil) and returns the keycode and SDL3 event timestamp in nanoseconds (same
+// reference clock as sdl.TicksNS() and Screen.FlipTS()).
 //
 // Unlike WaitKeysRT — which measures elapsed time from the function call —
 // the returned timestamp comes directly from the SDL3 KeyboardEvent.Timestamp
 // field, which is set at hardware-interrupt time. This makes it suitable for
 // computing reaction times relative to a stimulus onset captured with
-// Screen.FlipNS():
+// Screen.FlipTS():
 //
-//	onset, _ := screen.FlipNS()
-//	key, eventTS, _ := kb.WaitKeysEventRT(keys, -1)
-//	rtNS := int64(eventTS - onset)
+//	onset, _ := screen.FlipTS()
+//	key, keyTS, _ := kb.GetKeyEventTS(keys, -1)
+//	rtNS := int64(keyTS - onset)
 //
-// Pass timeoutMS = -1 for no timeout. On timeout, returns (0, 0, nil).
-// On ESC or quit, returns sdl.EndLoop.
-func (k *Keyboard) WaitKeysEventRT(keys []sdl.Keycode, timeoutMS int) (sdl.Keycode, uint64, error) {
+// If an event matching keys is already in the SDL queue, it is returned
+// immediately without blocking. Pass timeoutMS = -1 for no timeout.
+// On timeout, returns (0, 0, nil). On ESC or quit, returns sdl.EndLoop.
+//
+// Use GetKeyEventsTS to retrieve all events that arrived, not just the first.
+func (k *Keyboard) GetKeyEventTS(keys []sdl.Keycode, timeoutMS int) (sdl.Keycode, uint64, error) {
 	start := sdl.Ticks()
 
 	// Injected path: use the control-layer callback which carries the SDL3
@@ -239,8 +242,85 @@ func (k *Keyboard) WaitKeysEventRT(keys []sdl.Keycode, timeoutMS int) (sdl.Keyco
 	return waitSDLKeyEvent(keys, start, timeoutMS)
 }
 
-// Clear drains all pending keyboard (and other) events from SDL's event queue.
-// This is useful between trials to avoid processing stale key presses.
+// GetKeyEventsTS waits for one or more matching key events and returns ALL
+// that are available, ordered by hardware timestamp (earliest first).
+//
+// It blocks until at least one matching event arrives (like GetKeyEventTS),
+// then non-blockingly drains any additional key events already in the SDL
+// queue. This is useful for detecting simultaneous or near-simultaneous
+// presses. In the common case only one event is returned.
+//
+// Pass timeoutMS = -1 for no timeout. On timeout, returns (nil, nil).
+// On ESC or quit, returns sdl.EndLoop (with any events collected so far).
+func (k *Keyboard) GetKeyEventsTS(keys []sdl.Keycode, timeoutMS int) ([]InputEvent, error) {
+	firstKey, firstTS, err := k.GetKeyEventTS(keys, timeoutMS)
+	if err != nil {
+		return nil, err
+	}
+	if firstKey == 0 {
+		return nil, nil // timeout
+	}
+
+	first := InputEvent{Device: DeviceKeyboard, Key: firstKey, TimestampNS: firstTS}
+
+	// Non-blockingly drain any additional key events already in the queue.
+	rest, quit := drainMatchingKeyEvents(keys)
+	all := append([]InputEvent{first}, rest...)
+
+	// Sort by hardware timestamp (typically already in order).
+	for i := 1; i < len(all); i++ {
+		for j := i; j > 0 && all[j].TimestampNS < all[j-1].TimestampNS; j-- {
+			all[j], all[j-1] = all[j-1], all[j]
+		}
+	}
+
+	if quit {
+		return all, sdl.EndLoop
+	}
+	return all, nil
+}
+
+// drainMatchingKeyEvents non-blockingly reads all currently queued key events
+// and returns those matching keys (any key if keys is nil), plus whether a
+// quit or ESC event was encountered.
+func drainMatchingKeyEvents(keys []sdl.Keycode) ([]InputEvent, bool) {
+	var events []InputEvent
+	var ev sdl.Event
+	for sdl.PollEvent(&ev) {
+		switch ev.Type {
+		case sdl.EVENT_QUIT:
+			return events, true
+		case sdl.EVENT_KEY_DOWN:
+			ke := ev.KeyboardEvent()
+			if ke.Key == sdl.K_ESCAPE {
+				return events, true
+			}
+			matched := keys == nil
+			if !matched {
+				for _, kc := range keys {
+					if ke.Key == kc {
+						matched = true
+						break
+					}
+				}
+			}
+			if matched {
+				events = append(events, InputEvent{
+					Device:      DeviceKeyboard,
+					Key:         ke.Key,
+					TimestampNS: ke.Timestamp,
+				})
+			}
+		}
+	}
+	return events, false
+}
+
+// Clear drains the entire SDL event queue — keyboard, mouse, gamepad, and all
+// other event types — because SDL uses a single shared queue. Call it before
+// a new trial to discard stale presses from any device. Do not call it after
+// ShowTS/FlipTS: the participant may have already responded and the event
+// would be silently discarded before GetKeyEventTS can read it.
 func (k *Keyboard) Clear() {
 	var event sdl.Event
 	for sdl.PollEvent(&event) {

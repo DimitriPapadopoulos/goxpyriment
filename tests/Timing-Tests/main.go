@@ -783,7 +783,7 @@ func runSound(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 //
 // Each trial: a white flash appears for one frame; the participant presses any
 // key as fast as possible. RT is computed as event.Timestamp − onset_ns, where
-// onset_ns is the SDL nanosecond tick captured by Screen.FlipNS() immediately
+// onset_ns is the SDL nanosecond tick captured by Screen.FlipTS() immediately
 // after SDL_RenderPresent returns.
 //
 // Because both timestamps come from the same SDL nanosecond clock (SDL_GetTicksNS),
@@ -838,7 +838,7 @@ func runRT(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 			// Flash: draw white screen and flip, capturing SDL nanosecond onset.
 			exp.Screen.Renderer.SetDrawColor(255, 255, 255, 255)
 			exp.Screen.Renderer.Clear()
-			onsetNS, _ := exp.Screen.FlipNS()
+			onsetNS, _ := exp.Screen.FlipTS()
 
 			if !isNull {
 				go func() {
@@ -848,7 +848,7 @@ func runRT(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 			}
 
 			// Wait for keypress — returns SDL event timestamp (nanoseconds).
-			_, eventTS, err := exp.Keyboard.WaitKeysEventRT(nil, 5000)
+			_, eventTS, err := exp.Keyboard.GetKeyEventTS(nil, 5000)
 			if control.IsEndLoop(err) {
 				return control.EndLoop
 			}
@@ -1006,7 +1006,7 @@ func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 				r.SetDrawColor(bR, bG, bB, 255)
 				r.Clear()
 				if f == 0 {
-					ns, _ := exp.Screen.FlipNS()
+					ns, _ := exp.Screen.FlipTS()
 					onsetNS = ns
 					tOnsetMs = float64(clock.GetTimeNS())/1e6 - streamStartMs
 				} else {
@@ -1029,7 +1029,7 @@ func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 				r.SetDrawColor(dR, dG, dD, 255)
 				r.Clear()
 				if f == 0 {
-					ns, _ := exp.Screen.FlipNS()
+					ns, _ := exp.Screen.FlipTS()
 					offsetNS = ns
 					tOffsetMs = float64(clock.GetTimeNS())/1e6 - streamStartMs
 				} else {
@@ -1185,7 +1185,7 @@ func runVRR(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 				}
 				r.SetDrawColor(byte(*fLevelB), byte(*fLevelB), byte(*fLevelB), 255)
 				r.Clear()
-				onsetNS, _ := exp.Screen.FlipNS() // returns immediately (vsync=0)
+				onsetNS, _ := exp.Screen.FlipTS() // returns immediately (vsync=0)
 
 				// ── Hold for exactly targetDur using busy-wait ────────────────
 				sleepUntil(time.Now().Add(targetDur))
@@ -1193,7 +1193,7 @@ func runVRR(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 				// ── Offset: blank screen ─────────────────────────────────────
 				r.SetDrawColor(byte(*fLevelA), byte(*fLevelA), byte(*fLevelA), 255)
 				r.Clear()
-				offsetNS, _ := exp.Screen.FlipNS()
+				offsetNS, _ := exp.Screen.FlipTS()
 
 				if !isNull {
 					go func() {

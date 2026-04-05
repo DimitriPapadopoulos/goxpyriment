@@ -23,7 +23,7 @@ type VisualStreamElement struct {
 type UserEvent struct {
 	Event       sdl.Event     // The raw SDL event (Keyboard or Mouse)
 	Timestamp   time.Duration // Time relative to the start of the stream (Go clock, millisecond precision)
-	TimestampNS uint64        // SDL3 hardware event timestamp in nanoseconds (same clock as Screen.FlipNS)
+	TimestampNS uint64        // SDL3 hardware event timestamp in nanoseconds (same clock as Screen.FlipTS)
 }
 
 // TimingLog provides post-hoc verification of the actual presentation times.
@@ -107,7 +107,7 @@ func PresentStreamOfImages(screen *apparatus.Screen, elements []VisualStreamElem
 			}
 			if f == 0 {
 				// Capture the SDL nanosecond timestamp of the actual VSYNC flip.
-				ts, err := screen.FlipNS()
+				ts, err := screen.FlipTS()
 				if err != nil {
 					return userEvents, timingLogs, err
 				}
@@ -129,7 +129,7 @@ func PresentStreamOfImages(screen *apparatus.Screen, elements []VisualStreamElem
 				return userEvents, timingLogs, err
 			}
 			if f == 0 {
-				ts, err := screen.FlipNS()
+				ts, err := screen.FlipTS()
 				if err != nil {
 					return userEvents, timingLogs, err
 				}
@@ -318,7 +318,7 @@ func PlayStreamOfSounds(elements []SoundStreamElement) ([]UserEvent, []TimingLog
 // keyboard or mouse button events to logs. Each UserEvent carries both a
 // Go-clock stream-relative timestamp (Timestamp) and the SDL3 hardware event
 // timestamp in nanoseconds (TimestampNS), which is on the same clock as
-// Screen.FlipNS() and can be used for sub-millisecond RT computation.
+// Screen.FlipTS() and can be used for sub-millisecond RT computation.
 func collectEvents(baseTime time.Time, logs []UserEvent) []UserEvent {
 	var event sdl.Event
 	for sdl.PollEvent(&event) {

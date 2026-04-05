@@ -19,7 +19,7 @@ type Mouse struct {
 
 	// PollButtonsWithTS is like PollButtons but also returns the SDL3 event
 	// timestamp (nanoseconds). Injected by the control layer; used by
-	// WaitPressEventRT.
+	// GetPressEventTS.
 	PollButtonsWithTS func() (uint32, uint64, bool)
 }
 
@@ -132,13 +132,13 @@ func (m *Mouse) WaitPressRT(timeoutMS int) (uint32, int64, error) {
 	}
 }
 
-// WaitPressEventRT blocks until a mouse button is pressed and returns both
+// GetPressEventTS blocks until a mouse button is pressed and returns both
 // the button index and the SDL3 event timestamp in nanoseconds (same reference
-// clock as sdl.TicksNS() and Screen.FlipNS()).
+// clock as sdl.TicksNS() and Screen.FlipTS()).
 //
 // Pass timeoutMS = -1 for no timeout. On timeout, returns (0, 0, nil).
 // On quit, returns sdl.EndLoop.
-func (m *Mouse) WaitPressEventRT(timeoutMS int) (uint32, uint64, error) {
+func (m *Mouse) GetPressEventTS(timeoutMS int) (uint32, uint64, error) {
 	start := sdl.Ticks()
 
 	if m.PollButtonsWithTS != nil {

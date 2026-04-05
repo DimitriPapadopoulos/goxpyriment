@@ -315,7 +315,7 @@ func main() {
 				// ── Letter onset ──────────────────────────────────────────────
 				_ = exp.Screen.Clear()
 				_ = letterStims[t.letter].Draw(exp.Screen)
-				onsetNS, flipErr := exp.Screen.FlipNS()
+				onsetNS, flipErr := exp.Screen.FlipTS()
 				if flipErr != nil {
 					return flipErr
 				}
@@ -343,7 +343,7 @@ func main() {
 				} else {
 					responseKeys = []control.Keycode{control.K_F, control.K_J}
 				}
-				key, eventTS, kErr := exp.Keyboard.WaitKeysEventRT(responseKeys, maxRTms)
+				key, eventTS, kErr := exp.Keyboard.GetKeyEventTS(responseKeys, maxRTms)
 				cancel()
 				if kErr != nil {
 					return kErr

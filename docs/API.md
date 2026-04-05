@@ -141,7 +141,7 @@ control.ErrCancelled  // returned when the user cancels the dialog
 | Method | Description |
 |---|---|
 | `exp.Show(stim VisualStimulus) error` | Clear → draw → flip. The standard one-call stimulus presentation. |
-| `exp.ShowNS(stim VisualStimulus) (uint64, error)` | Clear → draw → flip, and return the SDL nanosecond timestamp captured immediately after the VSYNC flip. Use with `WaitKeysEventRT` for hardware-precision RT measurement. |
+| `exp.ShowTS(stim VisualStimulus) (uint64, error)` | Clear → draw → flip, and return the SDL nanosecond timestamp captured immediately after the VSYNC flip. Use with `GetKeyEventTS` for hardware-precision RT measurement. |
 | `exp.ShowInstructions(text string) error` | Display centered text and wait for spacebar. |
 | `exp.Blank(ms int) error` | Clear and flip screen, then wait `ms` milliseconds. |
 | `exp.Wait(ms int) error` | Wait `ms` ms while pumping SDL events (ESC-abortable). |
@@ -391,7 +391,7 @@ Stream functions disable GC, lock every onset and offset to a VSYNC boundary, an
 type UserEvent struct {
     Event       sdl.Event     // raw SDL event (KeyboardEvent, MouseButtonEvent, …)
     Timestamp   time.Duration // time relative to stream start (Go clock, ms precision)
-    TimestampNS uint64        // SDL3 hardware event timestamp, nanoseconds (same clock as Screen.FlipNS)
+    TimestampNS uint64        // SDL3 hardware event timestamp, nanoseconds (same clock as Screen.FlipTS)
 }
 
 type TimingLog struct {
@@ -509,7 +509,7 @@ screen.MousePosition() (float32, float32)              // current cursor in cent
 screen.Clear() error                                   // fill with background color
 screen.Update() error                                  // present (VSYNC-blocks)
 screen.Flip() error                                    // alias for Update
-screen.FlipNS() (uint64, error)                        // present + return SDL nanosecond timestamp after flip
+screen.FlipTS() (uint64, error)                        // present + return SDL nanosecond timestamp after flip
 screen.FrameDuration() time.Duration                   // nominal frame duration (falls back to 60 Hz)
 screen.SetLogicalSize(w, h int32) error
 screen.SetVSync(vsync int) error
@@ -517,7 +517,7 @@ screen.DisplayInfo() apparatus.DisplayInfo                    // monitor propert
 screen.Destroy()
 ```
 
-`FlipNS()` returns `sdl.TicksNS()` captured immediately after `SDL_RenderPresent`. This timestamp is on the same nanosecond clock as SDL3 event timestamps, so `int64(event.Timestamp - onsetNS)` gives hardware-precision reaction time without any polling latency.
+`FlipTS` returns `sdl.TicksNS()` captured immediately after `SDL_RenderPresent`. This timestamp is on the same nanosecond clock as SDL3 event timestamps, so `int64(event.Timestamp - onsetNS)` gives hardware-precision reaction time without any polling latency.
 
 ### Keyboard
 
@@ -526,20 +526,20 @@ key, err := exp.Keyboard.Wait()                                   // any key
 key, err := exp.Keyboard.WaitKey(control.K_SPACE)                // specific key
 key, err := exp.Keyboard.WaitKeys(keys, timeoutMS)                // first of several keys (−1 = no timeout)
 key, rt, err := exp.Keyboard.WaitKeysRT(keys, timeoutMS)          // with RT in ms from call site
-key, ts, err := exp.Keyboard.WaitKeysEventRT(keys, timeoutMS)     // with SDL event timestamp (nanoseconds)
+key, ts, err := exp.Keyboard.GetKeyEventTS(keys, timeoutMS)     // with SDL event timestamp (nanoseconds)
 key, err := exp.Keyboard.Check()                                  // non-blocking poll
 exp.Keyboard.Clear()                                              // drain SDL event queue
 ```
 
 `WaitKeys` and `WaitKeysRT` return `0, nil` on timeout; return `sdl.EndLoop` on ESC or window close.
 
-**`WaitKeysEventRT`** returns the SDL3 `KeyboardEvent.Timestamp` field — the nanosecond time at which the hardware key-down event was generated, on the same clock as `sdl.TicksNS()` and `Screen.FlipNS()`. This allows computing reaction time from any specific stimulus onset without manual arithmetic:
+**`GetKeyEventTS`** returns the SDL3 `KeyboardEvent.Timestamp` field — the nanosecond time at which the hardware key-down event was generated, on the same clock as `sdl.TicksNS()` and `Screen.FlipTS()`. This allows computing reaction time from any specific stimulus onset without manual arithmetic:
 
 ```go
-onset, _ := exp.ShowNS(stim1)    // nanoseconds at VSYNC flip
+onset, _ := exp.ShowTS(stim1)    // nanoseconds at VSYNC flip
 exp.Wait(500)
-exp.ShowNS(stim2)
-key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(responseKeys, -1)
+exp.ShowTS(stim2)
+key, eventTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, -1)
 rtToStim1 := int64(eventTS - onset)  // nanoseconds
 ```
 
@@ -549,12 +549,12 @@ rtToStim1 := int64(eventTS - onset)  // nanoseconds
 x, y := exp.Mouse.Position()                              // current position (center coords)
 btn, err := exp.Mouse.WaitPress()                         // block until button pressed
 btn, rt, err := exp.Mouse.WaitPressRT(timeoutMS)          // with RT in ms from call site
-btn, ts, err := exp.Mouse.WaitPressEventRT(timeoutMS)     // with SDL event timestamp (nanoseconds)
+btn, ts, err := exp.Mouse.GetPressEventTS(timeoutMS)     // with SDL event timestamp (nanoseconds)
 btn, err := exp.Mouse.Check()                             // non-blocking poll
 exp.Mouse.ShowCursor(show bool) error
 ```
 
-`WaitPressRT` mirrors `Keyboard.WaitKeysRT`: reaction time is measured in milliseconds from the call site. `WaitPressEventRT` returns the SDL3 hardware event timestamp in nanoseconds, suitable for use with `ShowNS`.
+`WaitPressRT` mirrors `Keyboard.WaitKeysRT`: reaction time is measured in milliseconds from the call site. `GetPressEventTS` returns the SDL3 hardware event timestamp in nanoseconds, suitable for use with `ShowTS`.
 
 ### GamePad
 
@@ -563,18 +563,18 @@ pads, err := apparatus.GetGamePads()                                  // enumera
 defer pads[0].Close()
 
 btn, err := pads[0].WaitPress()                                // block until any button
-btn, ts, err := pads[0].WaitPressEventRT(timeoutMS)            // with SDL event timestamp (nanoseconds)
+btn, ts, err := pads[0].GetPressEventTS(timeoutMS)            // with SDL event timestamp (nanoseconds)
 ```
 
-`WaitPressEventRT` returns the `GamepadButtonEvent.Timestamp` field — same nanosecond clock as `Screen.FlipNS` and keyboard/mouse event timestamps.
+`GetPressEventTS` returns the `GamepadButtonEvent.Timestamp` field — same nanosecond clock as `Screen.FlipTS` and keyboard/mouse event timestamps.
 
-### Unified Input — `WaitAnyEventRT`
+### Unified Input — `WaitAnyEventTS`
 
 When the response device is not fixed in advance (keyboard _or_ mouse click), use the method on `Experiment`:
 
 ```go
 // Accept F or J key, or any mouse button, timeout after 3 s
-ev, err := exp.WaitAnyEventRT(
+ev, err := exp.WaitAnyEventTS(
     []control.Keycode{control.K_F, control.K_J},
     true,   // catchMouse
     3000,
@@ -593,11 +593,11 @@ type InputEvent struct {
 }
 ```
 
-`TimestampNS` is on the same clock as `ShowNS`, so RT computation is identical regardless of device:
+`TimestampNS` is on the same clock as `ShowTS`, so RT computation is identical regardless of device:
 
 ```go
-onset, _ := exp.ShowNS(stim)
-ev, _ := exp.WaitAnyEventRT(keys, true, -1)
+onset, _ := exp.ShowTS(stim)
+ev, _ := exp.WaitAnyEventTS(keys, true, -1)
 rtNS := int64(ev.TimestampNS - onset)
 ```
 
@@ -645,7 +645,7 @@ rd := apparatus.NewTTLResponseDevice(box, 5*time.Millisecond)
 Usage in a trial loop:
 
 ```go
-onset, _ := exp.ShowNS(stim)
+onset, _ := exp.ShowTS(stim)
 _ = rd.DrainResponses(ctx)
 resp, err := rd.WaitResponse(ctx)
 // resp.RT is always valid; resp.Precise tells you whether to trust nanosecond accuracy
@@ -736,7 +736,7 @@ c.SleepUntil(target time.Duration)    // sleep until target offset (returns imme
 
 > **Note:** Prefer `exp.Wait(ms)` over `clock.Wait(ms)` in experiment code — `exp.Wait` pumps SDL events and detects ESC.
 
-> **Clock domains:** `GetTimeNS()` and `NowNanos()` use the Go monotonic clock (`time.Since`). SDL event timestamps from `Screen.FlipNS`, `WaitKeysEventRT`, `WaitPressEventRT`, and `WaitAnyEventRT` use `sdl.TicksNS()`. The two clocks have different origins and **must not be subtracted from each other** for reaction-time computation. Use the SDL-based functions exclusively for RT measurement.
+> **Clock domains:** `GetTimeNS()` and `NowNanos()` use the Go monotonic clock (`time.Since`). SDL event timestamps from `Screen.FlipTS`, `GetKeyEventTS`, `GetPressEventTS`, and `WaitAnyEventTS` use `sdl.TicksNS()`. The two clocks have different origins and **must not be subtracted from each other** for reaction-time computation. Use the SDL-based functions exclusively for RT measurement.
 
 ---
 

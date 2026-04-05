@@ -286,13 +286,13 @@ func main() {
 			_ = exp.Screen.Clear()
 			_ = leftStim[t.left].Draw(exp.Screen)
 			_ = rightStim[t.right].Draw(exp.Screen)
-			onsetNS, flipErr := exp.Screen.FlipNS()
+			onsetNS, flipErr := exp.Screen.FlipTS()
 			if flipErr != nil {
 				return flipErr
 			}
 
 			// Wait for "same" or "different" (letters remain on screen)
-			key, eventTS, kErr := exp.Keyboard.WaitKeysEventRT(
+			key, eventTS, kErr := exp.Keyboard.GetKeyEventTS(
 				[]control.Keycode{sameKey, diffKey},
 				maxRTms,
 			)

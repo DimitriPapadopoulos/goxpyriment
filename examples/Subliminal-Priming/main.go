@@ -380,7 +380,7 @@ func runStream(exp *control.Experiment, items []streamItem, header stimuli.Visua
 			}
 			if f == 0 {
 				// Capture the SDL nanosecond timestamp of the actual VSYNC flip.
-				ts, err := screen.FlipNS()
+				ts, err := screen.FlipTS()
 				if err != nil {
 					return 0, err
 				}
@@ -638,11 +638,11 @@ func main() {
 				}
 
 				// Post-trial seen/unseen response (RT from prompt VSYNC flip).
-				onsetNS, err := exp.ShowNS(seenPrompt)
+				onsetNS, err := exp.ShowTS(seenPrompt)
 				if err != nil {
 					return err
 				}
-				key, eventTS, err := exp.Keyboard.WaitKeysEventRT([]control.Keycode{control.K_S, sdl.K_U}, -1)
+				key, eventTS, err := exp.Keyboard.GetKeyEventTS([]control.Keycode{control.K_S, sdl.K_U}, -1)
 				rt := int64(eventTS-onsetNS) / 1_000_000
 				if err != nil {
 					return err

@@ -83,7 +83,8 @@ kb := &apparatus.Keyboard{PollKeys: pollFunc}  // injected by control.Experiment
 | `WaitKeys(keys []sdl.Keycode, timeoutMS int64)` | Block for one of the listed keys or timeout (-1 = no timeout) |
 | `WaitKey(key sdl.Keycode)` | Convenience for single key |
 | `WaitKeysRT(keys, timeoutMS)` | Returns `(key, rtMs, error)` |
-| `WaitKeysEventRT(keys, timeoutMS)` | Returns `(key, eventTimestampNS, error)` — hardware-precision SDL3 timestamp |
+| `GetKeyEventTS(keys, timeoutMS)` | Returns `(key, eventTimestampNS, error)` — hardware-precision SDL3 timestamp |
+| `GetKeyEventsTS(keys, timeoutMS)` | Returns `([]InputEvent, error)` — all queued events ordered by timestamp |
 | `Check()` | Non-blocking poll; returns first key or 0 |
 | `Clear()` | Drain SDL event queue |
 
@@ -101,7 +102,7 @@ m := &apparatus.Mouse{PollButtons: pollFunc}  // injected by control.Experiment
 | `Position() (x, y float32)` | Current cursor position in **window pixels** (not center-based) |
 | `WaitPress()` | Block until any mouse button pressed |
 | `WaitPressRT(timeoutMS)` | Returns `(button, rtMs, error)` |
-| `WaitPressEventRT(timeoutMS)` | Returns `(button, eventTimestampNS, error)` — hardware-precision SDL3 timestamp |
+| `GetPressEventTS(timeoutMS)` | Returns `(button, eventTimestampNS, error)` — hardware-precision SDL3 timestamp |
 | `Check()` | Non-blocking poll; returns first button or 0 |
 
 Note: `Position()` returns window-pixel coordinates, unlike `Screen.MousePosition()` which returns center-based coordinates.

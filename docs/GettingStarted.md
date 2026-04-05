@@ -245,9 +245,9 @@ All three stream functions return `([]UserEvent, []TimingLog, error)`, making it
 
 `WaitKeysRT` measures reaction time from the moment the function is called. That works well for a single-stimulus trial, but breaks down when several stimuli appear in sequence and you need RT from a specific onset.
 
-Consider a **masked priming** paradigm: a prime word appears briefly, then a target appears 500 ms later, and you want RT measured from the prime onset — not from when `WaitKeysEventRT` was called. With the standard approach you would need to record a timestamp before the prime and do arithmetic afterward. The event-timestamp API handles this directly.
+Consider a **masked priming** paradigm: a prime word appears briefly, then a target appears 500 ms later, and you want RT measured from the prime onset — not from when `GetKeyEventTS` was called. With the standard approach you would need to record a timestamp before the prime and do arithmetic afterward. The event-timestamp API handles this directly.
 
-SDL3 stamps every keyboard event with a hardware-interrupt time (`KeyboardEvent.Timestamp`, nanoseconds). `exp.ShowNS(stim)` returns the SDL nanosecond time captured immediately after the VSYNC flip. Because both values are on the same clock, their difference is hardware-precision RT — no arithmetic needed:
+SDL3 stamps every keyboard event with a hardware-interrupt time (`KeyboardEvent.Timestamp`, nanoseconds). `exp.ShowTS(stim)` returns the SDL nanosecond time captured immediately after the VSYNC flip. Because both values are on the same clock, their difference is hardware-precision RT — no arithmetic needed:
 
 ```go
 package main
@@ -283,18 +283,18 @@ func main() {
 
             // 1. Show prime — record its VSYNC flip timestamp
             prime := stimuli.NewTextLine(primes[i], 0, 0, control.Gray)
-            primeOnset, _ := exp.ShowNS(prime)
+            primeOnset, _ := exp.ShowTS(prime)
             prime.Unload()
 
             exp.Wait(500)  // prime–target SOA
 
             // 2. Show target — record its VSYNC flip timestamp
             target := stimuli.NewTextLine(targets[i], 0, 0, control.White)
-            targetOnset, _ := exp.ShowNS(target)
+            targetOnset, _ := exp.ShowTS(target)
             target.Unload()
 
             // 3. Wait for response — get hardware event timestamp
-            key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(responseKeys, 3000)
+            key, eventTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, 3000)
 
             // 4. Compute RTs from each stimulus onset
             rtFromPrime  := int64(eventTS - primeOnset)   // nanoseconds
@@ -314,10 +314,10 @@ func main() {
 
 Key observations:
 
-- `exp.ShowNS(stim)` is a drop-in replacement for `exp.Show(stim)` — it does the same clear → draw → flip, and additionally returns the nanosecond timestamp of the flip.
-- `WaitKeysEventRT` returns the SDL3 event timestamp (not a polling delta), so subtracting any previously recorded `ShowNS` onset gives a physically meaningful RT.
+- `exp.ShowTS(stim)` is a drop-in replacement for `exp.Show(stim)` — it does the same clear → draw → flip, and additionally returns the nanosecond timestamp of the flip.
+- `GetKeyEventTS` returns the SDL3 event timestamp (not a polling delta), so subtracting any previously recorded `ShowTS` onset gives a physically meaningful RT.
 - Both timestamps are in SDL nanoseconds (divide by `1e6` for milliseconds). Storing raw nanoseconds in the data file and converting offline is the recommended practice.
-- `WaitPressEventRT` provides the same capability for mouse responses.
+- `GetPressEventTS` provides the same capability for mouse responses.
 
 ---
 

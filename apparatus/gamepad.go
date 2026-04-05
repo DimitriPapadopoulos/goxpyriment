@@ -51,13 +51,13 @@ func (g *GamePad) WaitPress() (sdl.GamepadButton, error) {
 	}
 }
 
-// WaitPressEventRT blocks until a button is pressed on this gamepad and
+// GetPressEventTS blocks until a button is pressed on this gamepad and
 // returns both the button and the SDL3 event timestamp in nanoseconds (same
-// clock as Screen.FlipNS and Keyboard.WaitKeysEventRT).
+// clock as Screen.FlipTS and Keyboard.GetKeyEventTS).
 //
 // Pass timeoutMS = -1 for no timeout. On timeout, returns (0, 0, nil).
 // On quit, returns sdl.EndLoop.
-func (g *GamePad) WaitPressEventRT(timeoutMS int) (sdl.GamepadButton, uint64, error) {
+func (g *GamePad) GetPressEventTS(timeoutMS int) (sdl.GamepadButton, uint64, error) {
 	start := sdl.Ticks()
 	for {
 		if timeoutMS >= 0 {

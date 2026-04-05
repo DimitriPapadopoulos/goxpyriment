@@ -18,7 +18,7 @@ const (
 
 // InputEvent is a unified representation of a single input event from any
 // device (keyboard, mouse, or gamepad). It is returned by
-// Experiment.WaitAnyEventRT so that callers can wait for the first response
+// Experiment.WaitAnyEventTS so that callers can wait for the first response
 // regardless of which device the participant uses.
 //
 // Inspect the Device field to determine which response fields are populated:
@@ -33,11 +33,11 @@ const (
 //	}
 //
 // TimestampNS is always set to the SDL3 hardware event timestamp in
-// nanoseconds (same clock as Screen.FlipNS and WaitKeysEventRT), suitable
+// nanoseconds (same clock as Screen.FlipTS and GetKeyEventTS), suitable
 // for computing reaction time:
 //
-//	onset, _ := exp.ShowNS(stim)
-//	ev, _ := exp.WaitAnyEventRT(keys, true, -1)
+//	onset, _ := exp.ShowTS(stim)
+//	ev, _ := exp.WaitAnyEventTS(keys, true, -1)
 //	rtNS := int64(ev.TimestampNS - onset)
 type InputEvent struct {
 	Device        DeviceKind

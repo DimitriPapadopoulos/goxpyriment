@@ -111,7 +111,7 @@ func main() {
 
 **The run loop.** In Expyriment the trial logic runs in `main()` directly. In goxpyriment all SDL calls must run on the thread that owns the window; `exp.Run(func() error {...})` enforces this. Return `control.EndLoop` to exit cleanly.
 
-**Clock domains.** Expyriment's `exp.clock.time` measures from `control.initialize`. `clock.NewClock()` measures from whenever you create it. For stimulus-onset-locked RT, use `exp.ShowNS` + `exp.Keyboard.WaitKeysEventRT` (SDL nanosecond timestamps) rather than the `clock` package — see [UserManual §6](UserManual.md#6-timing-architecture).
+**Clock domains.** Expyriment's `exp.clock.time` measures from `control.initialize`. `clock.NewClock()` measures from whenever you create it. For stimulus-onset-locked RT, use `exp.ShowTS` + `exp.Keyboard.GetKeyEventTS` (SDL nanosecond timestamps) rather than the `clock` package — see [UserManual §6](UserManual.md#6-timing-architecture).
 
 **`.csv` files.** The format is compatible: plain CSV with `#`-prefixed metadata lines. Existing Python scripts that read Expyriment data files with `pandas.read_csv(..., comment='#')` will read goxpyriment output without modification.
 
@@ -146,7 +146,7 @@ PsychoPy Coder mode and goxpyriment are structurally similar: both give you a wi
 | `event.waitKeys(keyList=['f','j'])` | `exp.Keyboard.WaitKeys(keys, timeout)` | |
 | `event.waitKeys(maxWait=3)` | `exp.Keyboard.WaitKeys(keys, 3000)` | Timeout in ms. |
 | `clock.getTime()` for RT | `exp.Keyboard.WaitKeysRT(keys, timeout)` | Returns RT in ms from call site. |
-| `win.callOnFlip(clock.reset)` + `event.waitKeys` | `exp.ShowNS(stim)` + `WaitKeysEventRT(...)` | Hardware-precise; no callOnFlip needed. |
+| `win.callOnFlip(clock.reset)` + `event.waitKeys` | `exp.ShowTS(stim)` + `GetKeyEventTS(...)` | Hardware-precise; no callOnFlip needed. |
 | `data.TrialHandler(trialList, nReps)` | `design.NewBlock(...)` + `block.AddTrial(t, copies, true)` | |
 | `data.ExperimentHandler(...)` | `exp.Data` | |
 | `thisExp.addData("rt", rt)` | `exp.Data.Add(rt)` | |
@@ -200,8 +200,8 @@ func main() {
     err := exp.Run(func() error {
         exp.Show(fix)
         exp.Wait(500)
-        onset, _ := exp.ShowNS(target)           // nanosecond timestamp at VSYNC flip
-        key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(
+        onset, _ := exp.ShowTS(target)           // nanosecond timestamp at VSYNC flip
+        key, eventTS, _ := exp.Keyboard.GetKeyEventTS(
             []control.Keycode{control.K_F, control.K_J}, -1,
         )
         rtMs := int64(eventTS-onset) / 1_000_000 // nanoseconds → milliseconds
@@ -219,9 +219,9 @@ func main() {
 
 **Units and coordinate system.** PsychoPy supports multiple unit systems (norm, pix, deg, cm). Goxpyriment always uses pixels, with (0, 0) at the screen center, +X right, +Y **up** (same as PsychoPy's `units='pix'`). For visual-angle calculations, use the `units` package: `units.NewMonitor(widthCm, distanceCm, widthPx)` then `mon.DegToPx(deg)`.
 
-**Time units.** PsychoPy uses seconds throughout (`core.wait(0.5)`, `clock.getTime()` returns float seconds). Goxpyriment uses **milliseconds** for `exp.Wait` and `WaitKeysRT`, and **nanoseconds** for hardware event timestamps (`ShowNS`, `WaitKeysEventRT`). Divide nanosecond differences by `1_000_000` to get milliseconds.
+**Time units.** PsychoPy uses seconds throughout (`core.wait(0.5)`, `clock.getTime()` returns float seconds). Goxpyriment uses **milliseconds** for `exp.Wait` and `WaitKeysRT`, and **nanoseconds** for hardware event timestamps (`ShowTS`, `GetKeyEventTS`). Divide nanosecond differences by `1_000_000` to get milliseconds.
 
-**`callOnFlip` is not needed.** PsychoPy's `win.callOnFlip(clock.reset)` is a workaround for the fact that `flip()` and the clock reset are separate operations. `exp.ShowNS(stim)` captures the SDL nanosecond timestamp atomically at the VSYNC flip — no workaround needed.
+**`callOnFlip` is not needed.** PsychoPy's `win.callOnFlip(clock.reset)` is a workaround for the fact that `flip()` and the clock reset are separate operations. `exp.ShowTS(stim)` captures the SDL nanosecond timestamp atomically at the VSYNC flip — no workaround needed.
 
 **Builder vs Coder.** PsychoPy Builder generates Python Coder scripts. There is no Builder equivalent in goxpyriment; all experiments are written in code. The [vibe-coding tip](../README.md) in the README describes how AI coding agents can generate Go experiment code from a plain-language description.
 
@@ -244,7 +244,7 @@ Psychtoolbox-3 (PTB) and goxpyriment share a lower-level philosophy: you open a 
 | `Screen('OpenWindow', screenNum, bgColor)` | `control.NewExperimentFromFlags(...)` | Also initializes audio, font, and data file. |
 | `Screen('CloseAll')` | `defer exp.End()` | |
 | `Screen('Flip', win)` | `exp.Flip()` | Both return a timestamp. |
-| `Screen('Flip', win)` → VBL timestamp | `exp.ShowNS(stim)` → `uint64` nanoseconds | PTB returns seconds (64-bit float); goxpyriment returns nanoseconds (uint64). |
+| `Screen('Flip', win)` → VBL timestamp | `exp.ShowTS(stim)` → `uint64` nanoseconds | PTB returns seconds (64-bit float); goxpyriment returns nanoseconds (uint64). |
 | `Screen('FillRect', win, color, rect)` | `stimuli.NewRectangle(cx, cy, w, h, color)` then `exp.Show(rect)` | |
 | `Screen('DrawText', win, text, x, y, color)` | `stimuli.NewTextLine(text, x, y, color)` then `exp.Show(tl)` | |
 | `Screen('MakeTexture', win, img)` | `stimuli.NewPicture("path", x, y)` | Texture is lazily uploaded on first `Draw`. |
@@ -256,7 +256,7 @@ Psychtoolbox-3 (PTB) and goxpyriment share a lower-level philosophy: you open a 
 | `KbWait` | `exp.Keyboard.Wait()` | |
 | `KbCheck` | `exp.Keyboard.Check()` | Non-blocking poll. |
 | `KbStrokeWait` / `KbName` | `exp.Keyboard.WaitKeys(keys, timeout)` | Pass `nil` for any key. |
-| RT via `GetSecs` before/after `KbWait` | `exp.Keyboard.WaitKeysRT(keys, timeout)` (ms) | Or `WaitKeysEventRT` for nanosecond accuracy. |
+| RT via `GetSecs` before/after `KbWait` | `exp.Keyboard.WaitKeysRT(keys, timeout)` (ms) | Or `GetKeyEventTS` for nanosecond accuracy. |
 | `PsychPortAudio('Open', ...)` / `'Start'` | `stimuli.NewSound(path)` + `snd.Play()` | |
 | `MakeBeep(freq, dur, rate)` | `stimuli.NewTone(freq, duration, volume)` | |
 | `Snd('Play', ...)` | `tone.Play()` | |
@@ -313,8 +313,8 @@ func main() {
     err := exp.Run(func() error {
         exp.Show(fix)
         exp.Wait(500)
-        onset, _    := exp.ShowNS(target)
-        _, eventTS, _ := exp.Keyboard.WaitKeysEventRT(nil, -1)
+        onset, _    := exp.ShowTS(target)
+        _, eventTS, _ := exp.Keyboard.GetKeyEventTS(nil, -1)
         rtMs := int64(eventTS-onset) / 1_000_000
         _ = rtMs
         return control.EndLoop
@@ -329,7 +329,7 @@ func main() {
 
 **Time units.** PTB uses **seconds** (double-precision float) throughout. Goxpyriment uses **milliseconds** for `exp.Wait` / `WaitKeysRT`, and **nanoseconds** for hardware event timestamps. To convert: multiply PTB seconds by 1000 to get ms, or 1,000,000,000 to get ns.
 
-**VBL timestamps.** PTB's `Screen('Flip')` returns the VBL timestamp as `GetSecs` seconds. `exp.ShowNS(stim)` returns `sdl.TicksNS()` nanoseconds captured immediately after the VSYNC flip — a different clock origin. Do not mix SDL timestamps with `clock.GetTimeNS()` for RT calculation; use SDL timestamps exclusively (see [UserManual §6](UserManual.md#6-timing-architecture)).
+**VBL timestamps.** PTB's `Screen('Flip')` returns the VBL timestamp as `GetSecs` seconds. `exp.ShowTS(stim)` returns `sdl.TicksNS()` nanoseconds captured immediately after the VSYNC flip — a different clock origin. Do not mix SDL timestamps with `clock.GetTimeNS()` for RT calculation; use SDL timestamps exclusively (see [UserManual §6](UserManual.md#6-timing-architecture)).
 
 **Coordinate system.** PTB uses a top-left origin (+Y down), consistent with screen pixel conventions. Goxpyriment uses a **center origin (+Y up)**, same as PsychoPy `pix` units. A stimulus at (0, 0) appears at screen center; a stimulus at (0, 200) appears 200 pixels **above** center.
 

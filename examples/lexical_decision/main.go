@@ -101,10 +101,10 @@ func main() {
 			exp.Wait(500)
 
 			// Stimulus
-			onsetNS, _ := exp.ShowNS(t.stim)
+			onsetNS, _ := exp.ShowTS(t.stim)
 
 			// Wait for response
-			key, eventTS, _ := exp.Keyboard.WaitKeysEventRT([]control.Keycode{WordResponseKey, NonWordResponseKey}, MaxResponseDelay)
+			key, eventTS, _ := exp.Keyboard.GetKeyEventTS([]control.Keycode{WordResponseKey, NonWordResponseKey}, MaxResponseDelay)
 			rt := int64(eventTS-onsetNS) / 1_000_000
 
 			// RT would be 0 or very large if wait timed out and returned 0,

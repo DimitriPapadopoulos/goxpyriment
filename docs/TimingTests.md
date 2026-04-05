@@ -20,7 +20,7 @@ a tone that should coincide with a visual flash, or measuring a participant's
 reaction time to the nearest millisecond, you are trusting the computer to do
 two things correctly:
 
-1. **Present stimuli when you ask it to.** If you call `ShowNS()` or
+1. **Present stimuli when you ask it to.** If you call `ShowTS` or
    `PresentStreamOfImages()` and ask for a 100 ms word, does the word actually
    appear on screen for 100 ms?
 2. **Record timestamps accurately.** If you record the time of a key press,
@@ -70,7 +70,7 @@ This has two important consequences:
   not for 25 ms (there is no "half-frame" on an LCD). Plan your stimulus
   durations accordingly.
 
-- **The exact onset time of a stimulus is not the moment you call `ShowNS()`.
+- **The exact onset time of a stimulus is not the moment you call `ShowTS`.
   It is the moment the next VSYNC occurs**, which could be anywhere between
   0 and 16.67 ms later. goxpyriment's VSYNC-locked rendering keeps this
   offset constant and predictable once the pipeline is warmed up, but the

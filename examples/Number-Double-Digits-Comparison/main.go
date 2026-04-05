@@ -314,13 +314,13 @@ Press SPACE to start.`, func() int {
 			if err := targetStim.Draw(exp.Screen); err != nil {
 				return err
 			}
-			onsetNS, err := exp.Screen.FlipNS()
+			onsetNS, err := exp.Screen.FlipTS()
 			if err != nil {
 				return err
 			}
 
 			// Wait for a keypress up to stimDurMs.
-			key, eventTS, respErr := exp.Keyboard.WaitKeysEventRT(respKeys, stimDurMs)
+			key, eventTS, respErr := exp.Keyboard.GetKeyEventTS(respKeys, stimDurMs)
 			if control.IsEndLoop(respErr) {
 				return control.EndLoop
 			}

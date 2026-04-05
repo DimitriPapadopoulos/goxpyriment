@@ -404,7 +404,7 @@ func flipStim(screen *apparatus.Screen, stim stimuli.VisualStimulus, frame *sdl.
 	if stim != nil {
 		_ = stim.Draw(screen)
 	}
-	ts, _ := screen.FlipNS()
+	ts, _ := screen.FlipTS()
 	return ts
 }
 

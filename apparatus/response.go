@@ -22,7 +22,7 @@ import (
 // RT is the elapsed time from the [ResponseDevice.WaitResponse] call to the
 // moment the input was detected. Its precision depends on the device:
 //   - Precise == true:  RT derived from an SDL3 hardware event timestamp
-//     (nanosecond resolution, same clock as Screen.FlipNS). Use this for
+//     (nanosecond resolution, same clock as Screen.FlipTS). Use this for
 //     stimulus-onset-locked reaction time measurements.
 //   - Precise == false: RT measured with time.Now() at detection (software
 //     poll). Accuracy is limited by the device's poll interval (~5 ms).
@@ -76,7 +76,7 @@ func (d *KeyboardResponseDevice) WaitResponse(ctx context.Context) (Response, er
 		if err := ctx.Err(); err != nil {
 			return Response{}, err
 		}
-		key, ts, err := d.KB.WaitKeysEventRT(nil, sliceMS)
+		key, ts, err := d.KB.GetKeyEventTS(nil, sliceMS)
 		if err != nil {
 			return Response{}, err
 		}
@@ -119,7 +119,7 @@ func (d *MouseResponseDevice) WaitResponse(ctx context.Context) (Response, error
 		if err := ctx.Err(); err != nil {
 			return Response{}, err
 		}
-		btn, ts, err := d.M.WaitPressEventRT(sliceMS)
+		btn, ts, err := d.M.GetPressEventTS(sliceMS)
 		if err != nil {
 			return Response{}, err
 		}
@@ -163,7 +163,7 @@ func (d *GamepadResponseDevice) WaitResponse(ctx context.Context) (Response, err
 		if err := ctx.Err(); err != nil {
 			return Response{}, err
 		}
-		btn, ts, err := d.GP.WaitPressEventRT(sliceMS)
+		btn, ts, err := d.GP.GetPressEventTS(sliceMS)
 		if err != nil {
 			return Response{}, err
 		}

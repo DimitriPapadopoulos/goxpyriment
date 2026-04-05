@@ -21,7 +21,9 @@ This manual explains the key concepts of the library. It assumes you have read t
 13. [Animated Stimuli](#13-animated-stimuli)
 14. [Gamma Correction and Luminance Linearity](#14-gamma-correction-and-luminance-linearity)
 15. [Hardware Triggers and TTL Devices](#15-hardware-triggers-and-ttl-devices)
-16. [Putting It All Together](#16-putting-it-all-together)
+16. [Display Compositor Bypass](#16-display-compositor-bypass)
+17. [Variable Refresh Rate (VRR) Stimulus Presentation](#17-variable-refresh-rate-vrr-stimulus-presentation)
+18. [Putting It All Together](#18-putting-it-all-together)
 
 ---
 
@@ -243,6 +245,25 @@ if err := exp.SetLogicalSize(1920, 1080); err != nil {
 // Now (960, 540) is the center-right area, regardless of actual screen size.
 ```
 
+### Display scaling (HiDPI / fractional scaling)
+
+> **Recommendation: set your OS display scaling to 100% before running experiments.**
+
+Most desktop environments (GNOME, KDE, Windows, macOS) allow the user to scale the entire UI — e.g. 125%, 133%, 150% — to make text and icons larger on high-density screens. Goxpyriment does not currently compensate for fractional OS-level scaling. Running with a scale factor other than 100% can cause:
+
+- stimulus positions and sizes to be wrong (coordinates are in logical pixels, but the OS maps them to physical pixels at the scale factor),
+- video playback and canvas rendering to appear cropped or misaligned,
+- the window to not fill the screen correctly in fullscreen mode.
+
+To disable scaling before running an experiment:
+
+- **GNOME (Ubuntu):** *Settings → Displays → Scale → 100%*
+- **KDE:** *System Settings → Display and Monitor → Scale → 100%*
+- **Windows:** *Settings → Display → Scale → 100%*
+- **macOS:** *System Settings → Displays → Resolution → Default* (or choose a non-HiDPI mode)
+
+You can restore your preferred scaling after the session.
+
 ---
 
 ## 5. The Rendering Model
@@ -311,16 +332,18 @@ Always use `exp.Wait` for inter-trial and inter-stimulus intervals — it keeps 
 
 ### Nanosecond event timestamps
 
-SDL3 timestamps every input event at hardware-interrupt time using `SDL_GetTicksNS()`. These timestamps are not affected by when your code polls the event queue, so they reflect the actual moment of the keypress or button click with nanosecond precision.
+SDL3 timestamps every input event **at hardware-interrupt time**, before any application code runs. The timestamp is stored with the event in the SDL event queue, where it remains untouched until your code reads it.
 
-`exp.ShowNS(stim)` calls the usual clear → draw → flip sequence and then captures `sdl.TicksNS()` immediately after the VSYNC flip. `exp.Keyboard.WaitKeysEventRT(keys, timeout)` returns the SDL event's own timestamp rather than a polling-time delta. Because both values are on the same SDL clock, their difference gives hardware-precision reaction time:
+This has a crucial consequence: **it does not matter when you call `GetKeyEventTS`**. Any keypress that occurred — even during `exp.Wait`, between two `ShowTS` calls, or while other computation was running — is waiting in the queue with its exact hardware timestamp. Nothing is lost. This is fundamentally different from a polling-based approach, where a keypress can only be measured from the moment the polling function is called, and any code running before that call inflates the apparent RT.
+
+`exp.ShowTS(stim)` records the SDL nanosecond time of the VSYNC flip. `GetKeyEventTS` retrieves the event's own hardware timestamp. Subtracting the two gives hardware-precision RT regardless of how much code ran in between:
 
 ```go
-onset, _ := exp.ShowNS(stim1)   // nanoseconds at VSYNC flip
-exp.Wait(500)
-exp.ShowNS(stim2)
-key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(responseKeys, -1)
-rtToStim1 := int64(eventTS - onset)  // nanoseconds, no arithmetic needed
+onset, _ := exp.ShowTS(stim1)   // record flip timestamp
+exp.Wait(500)                    // keypress here is NOT lost
+exp.ShowTS(stim2)                // keypress here is also NOT lost
+key, keyTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, -1)
+rtToStim1 := int64(keyTS - onset)   // correct even if pressed during Wait
 ```
 
 This is especially useful when you need RT relative to a specific stimulus in a multi-stimulus sequence — something that `WaitKeysRT` cannot express directly, since it measures from the call site rather than from a recorded onset.
@@ -345,14 +368,16 @@ Use this decision guide before committing to a timing strategy.
 | Coarse ISIs and fixation durations (≥ 100 ms) | `exp.Wait(ms)` — adequate precision, keeps the event loop alive |
 | Stimulus duration measured in frames (e.g. 2-frame mask) | `exp.Show` inside a VSYNC-locked loop, or `PresentStreamOfImages` (Section 10) |
 | Single-stimulus trial, RT relative to onset | `exp.Show(stim)` + `exp.Keyboard.WaitKeysRT(...)` — millisecond RT from call site |
-| Multi-stimulus sequence, RT relative to a specific stimulus | `exp.ShowNS(stim)` + `exp.Keyboard.WaitKeysEventRT(...)` — nanosecond timestamps on the same SDL clock; subtract directly |
+| Multi-stimulus sequence, RT relative to a specific stimulus | `exp.ShowTS(stim)` + `exp.Keyboard.GetKeyEventTS(...)` — nanosecond timestamps on the same SDL clock; subtract directly |
 | RSVP or rapid animation (frame-accurate presentation of many items) | `PresentStreamOfImages` / `PresentStreamOfTexts` (Section 10) — GC disabled, VSYNC-locked, full timing log |
-| EEG/MEG synchronisation required | Add a TTL pulse via `triggers` immediately after `exp.ShowNS` (Section 15) |
+| EEG/MEG synchronisation required | Add a TTL pulse via `triggers` immediately after `exp.ShowTS` (Section 15) |
 | Stimulus duration not a multiple of the frame period (e.g. 10 ms, 17 ms) | Variable Refresh Rate mode — see below |
 
 **OS considerations.** Presentation latency depends heavily on whether the display compositor is active — see the next section. For EEG work, always verify onset timing with a photodiode regardless of OS.
 
-**When in doubt, use `ShowNS` + `WaitKeysEventRT`.** The overhead over `Show` + `WaitKeysRT` is negligible, and you get hardware-precision timestamps at no cost.
+**When in doubt, use `ShowTS` + `GetKeyEventTS`.** The overhead over `Show` + `WaitKeysRT` is negligible, and you get hardware-precision timestamps at no cost.
+
+**`ShowTS` vs `FlipTS`.** `exp.ShowTS(stim)` is the standard high-level call: it clears the screen, draws the stimulus, flips, and returns the flip timestamp — one line for the common case. `exp.Screen.FlipTS()` is the lower-level primitive that only flips and timestamps, leaving clearing and drawing to you. Use it directly when you need to compose several stimuli with multiple `Draw` calls before a single flip, or when working inside a VRR or VSYNC-locked loop where you manage the render cycle yourself (see the VRR section below).
 
 ### Display compositor bypass
 
@@ -441,7 +466,7 @@ defer debug.SetGCPercent(old)
 exp.Screen.Renderer.SetDrawColor(0, 0, 0, 255)
 exp.Screen.Clear()
 myStim.Draw(exp.Screen)
-onsetNS, _ := exp.Screen.FlipNS()
+onsetNS, _ := exp.Screen.FlipTS()
 
 // Hold for exactly targetDur using a busy-wait (sub-ms precision).
 deadline := time.Now().Add(targetDur)
@@ -450,7 +475,7 @@ for time.Now().Before(deadline) { /* spin */ }
 // Present blank — the display switches immediately on VRR.
 exp.Screen.Renderer.SetDrawColor(0, 0, 0, 255)
 exp.Screen.Clear()
-offsetNS, _ := exp.Screen.FlipNS()
+offsetNS, _ := exp.Screen.FlipTS()
 
 actualDurMs := float64(offsetNS-onsetNS) / 1e6
 ```
@@ -523,7 +548,7 @@ key, err := exp.Keyboard.WaitKeys([]control.Keycode{control.K_F, control.K_J}, 3
 key, rt, err := exp.Keyboard.WaitKeysRT([]control.Keycode{control.K_F, control.K_J}, 3000)
 
 // Hardware-precision version: returns the SDL event's nanosecond timestamp
-key, eventTS, err := exp.Keyboard.WaitKeysEventRT([]control.Keycode{control.K_F, control.K_J}, 3000)
+key, eventTS, err := exp.Keyboard.GetKeyEventTS([]control.Keycode{control.K_F, control.K_J}, 3000)
 
 // Non-blocking poll — returns 0 if nothing pressed
 key, err := exp.Keyboard.Check()
@@ -532,27 +557,46 @@ key, err := exp.Keyboard.Check()
 exp.Keyboard.Clear()
 ```
 
-**`WaitKeysRT` vs `WaitKeysEventRT`:**
+**`GetKeyEventTS` "get" semantics.** Unlike the `Wait*` functions, `GetKeyEventTS` reads from the SDL event queue and returns *immediately* if a matching event is already there — it only blocks when the queue has no matching event. This means a keypress that happened during `exp.Wait` or any other intervening code is consumed instantly on the next `GetKeyEventTS` call, with its original hardware timestamp intact.
+
+**When to call `Clear()`.** Despite living on `exp.Keyboard`, `Clear()` drains the **entire** SDL event queue — keyboard, mouse, gamepad, and everything else — because SDL uses a single shared queue. Call it at the start of a trial (before `ShowTS`) to discard stale events from any device. Do **not** call it after `ShowTS`: the participant may have already responded, and `Clear()` would silently discard that event before `GetKeyEventTS` or `GetPressEventTS` ever sees it.
+
+**`WaitKeysRT` vs `GetKeyEventTS`:**
 
 `WaitKeysRT` measures elapsed time from the moment the call is made (using `sdl.Ticks()`, millisecond granularity). In a single-stimulus trial this is a good approximation of RT from stimulus onset, but it accumulates any delay between `Show()` returning and `WaitKeysRT` being called.
 
-`WaitKeysEventRT` returns the SDL3 event's own `Timestamp` field — the nanosecond time at which the hardware key-down event was generated. Combined with `exp.ShowNS(stim)`, which records the nanosecond time of the VSYNC flip, reaction time is simply:
+`GetKeyEventTS` returns the SDL3 event's own `Timestamp` field — the nanosecond time at which the hardware key-down event was generated. Combined with `exp.ShowTS(stim)`, which records the nanosecond time of the VSYNC flip, reaction time is simply:
 
 ```go
-onset, _ := exp.ShowNS(target)   // nanoseconds at VSYNC flip
-key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(responseKeys, 3000)
+onset, _ := exp.ShowTS(target)   // nanoseconds at VSYNC flip
+key, eventTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, 3000)
 rtNS := int64(eventTS - onset)   // nanoseconds; divide by 1e6 for ms
 ```
 
 This form is also the only correct approach when multiple stimuli are presented in sequence and you need RT relative to a specific one:
 
 ```go
-onset1, _ := exp.ShowNS(prime)   // prime appears
+onset1, _ := exp.ShowTS(prime)   // prime appears
 exp.Wait(500)
-exp.ShowNS(target)               // target appears 500 ms later
-key, eventTS, _ := exp.Keyboard.WaitKeysEventRT(responseKeys, 3000)
+exp.ShowTS(target)               // target appears 500 ms later
+key, eventTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, 3000)
 rtToPrime := int64(eventTS - onset1)  // RT from prime onset
 ```
+
+**Collecting multiple simultaneous responses — `GetKeyEventsTS`:**
+
+In rare cases you may want to capture *all* key events that occurred, not just the first. `GetKeyEventsTS` blocks until at least one matching event arrives, then non-blockingly drains any additional events already in the SDL queue and returns them all as a `[]apparatus.InputEvent` sorted by hardware timestamp:
+
+```go
+events, err := exp.Keyboard.GetKeyEventsTS(responseKeys, 3000)
+if len(events) > 0 {
+    firstKey := events[0].Key
+    firstTS  := events[0].TimestampNS
+    rtNS := int64(firstTS - onset)
+}
+```
+
+This is useful for detecting simultaneous bilateral responses (e.g. both hands pressed at once) or for logging all presses within a trial window. For the typical single-response case, `GetKeyEventTS` is simpler.
 
 ### Mouse
 
@@ -564,7 +608,7 @@ btn, err := exp.Mouse.WaitPress()
 btn, rt, err := exp.Mouse.WaitPressRT(3000)
 
 // Hardware-precision version: returns the SDL event's nanosecond timestamp
-btn, eventTS, err := exp.Mouse.WaitPressEventRT(3000)
+btn, eventTS, err := exp.Mouse.GetPressEventTS(3000)
 
 // Non-blocking poll
 btn, err := exp.Mouse.Check()
@@ -578,15 +622,15 @@ exp.Mouse.ShowCursor(false)
 
 Button values: `control.BUTTON_LEFT`, `control.BUTTON_RIGHT`.
 
-### Multi-device input — `WaitAnyEventRT`
+### Multi-device input — `WaitAnyEventTS`
 
-If you want to accept a response from _either_ the keyboard or the mouse (or both), use `exp.WaitAnyEventRT` instead of calling `Keyboard` and `Mouse` separately:
+If you want to accept a response from _either_ the keyboard or the mouse (or both), use `exp.WaitAnyEventTS` instead of calling `Keyboard` and `Mouse` separately:
 
 ```go
-onset, _ := exp.ShowNS(stim)
+onset, _ := exp.ShowTS(stim)
 
 // Accept F or J key, or any mouse button click, up to 3 s
-ev, err := exp.WaitAnyEventRT(
+ev, err := exp.WaitAnyEventTS(
     []control.Keycode{control.K_F, control.K_J},
     true,   // catchMouse
     3000,
@@ -618,7 +662,7 @@ if key == sdl.K_A { ... }
 
 ### Response Devices
 
-All of the input methods above are device-specific: `WaitKeysEventRT` for keyboards, `WaitPressEventRT` for the mouse, and so on. If the experiment should run equally well with different input hardware — a keyboard in one lab, a response box in another — device-specific calls scatter conditional logic throughout the trial loop.
+All of the input methods above are device-specific: `GetKeyEventTS` for keyboards, `GetPressEventTS` for the mouse, and so on. If the experiment should run equally well with different input hardware — a keyboard in one lab, a response box in another — device-specific calls scatter conditional logic throughout the trial loop.
 
 `ResponseDevice` is a single interface that abstracts over all of them:
 
@@ -659,7 +703,7 @@ var rd apparatus.ResponseDevice = apparatus.NewTTLResponseDevice(box, 5*time.Mil
 All three look identical inside a trial loop:
 
 ```go
-onset, _ := exp.ShowNS(stim)
+onset, _ := exp.ShowTS(stim)
 _ = rd.DrainResponses(ctx)         // clear stale presses from previous trial
 resp, err := rd.WaitResponse(ctx)
 if err != nil { /* ESC, timeout, etc. */ }
@@ -673,13 +717,13 @@ The `Precise` field tells you whether `RT` came from a nanosecond hardware event
 
 | Device | `Precise` | RT accuracy |
 |--------|-----------|-------------|
-| Keyboard, Mouse, Gamepad | `true` | SDL3 hardware event timestamp, nanosecond resolution — identical to using `WaitKeysEventRT` directly |
+| Keyboard, Mouse, Gamepad | `true` | SDL3 hardware event timestamp, nanosecond resolution — identical to using `GetKeyEventTS` directly |
 | MEGTTLBox, DLPIO8 | `false` | `time.Now()` at poll detection; accuracy bounded by poll interval (default 5 ms) |
 
-When `Precise` is `true`, the RT in the `Response` is computed from `sdl.TicksNS()` captured at the `WaitResponse` call versus the SDL3 hardware event timestamp — the same nanosecond clock used by `Screen.FlipNS`. It is therefore suitable for stimulus-onset-locked RT:
+When `Precise` is `true`, the RT in the `Response` is computed from `sdl.TicksNS()` captured at the `WaitResponse` call versus the SDL3 hardware event timestamp — the same nanosecond clock used by `Screen.FlipTS`. It is therefore suitable for stimulus-onset-locked RT:
 
 ```go
-onset, _ := exp.ShowNS(stim)
+onset, _ := exp.ShowTS(stim)
 resp, _ := rd.WaitResponse(ctx)
 if resp.Precise {
     // resp.RT was computed from SDL hardware timestamps: nanosecond accuracy
@@ -859,7 +903,7 @@ events, logs, err := stimuli.PresentStreamOfImages(exp.Screen, elements, 0, 0)
 Each `UserEvent` carries two timestamps:
 
 - `Timestamp` — a `time.Duration` relative to stream start, Go monotonic clock, millisecond precision. Useful for quick inspection.
-- `TimestampNS` — the SDL3 hardware event timestamp in nanoseconds, same clock as `Screen.FlipNS`. Use this for sub-millisecond RT computation.
+- `TimestampNS` — the SDL3 hardware event timestamp in nanoseconds, same clock as `Screen.FlipTS`. Use this for sub-millisecond RT computation.
 
 ```go
 for _, ev := range events {
@@ -925,7 +969,7 @@ Jitter below ±1 frame (±8–17 ms depending on monitor) is normal and expected
 **macOS (Metal)**
 
 - The macOS WindowServer compositor is **always active** — exclusive fullscreen does not bypass it. SDL3 submits each frame to the compositor, which forwards it to the display at the next VSYNC.
-- `FlipNS()` captures `sdl.TicksNS()` immediately after `Present()` returns; this reflects when the frame was *submitted to the compositor*, not when photons reached the screen. The additional compositor latency is typically **0–1 frames** (~0–17 ms at 60 Hz) and is consistent across trials, so it does not inflate RT variance but does add a fixed bias.
+- `FlipTS` captures `sdl.TicksNS()` immediately after `Present()` returns; this reflects when the frame was *submitted to the compositor*, not when photons reached the screen. The additional compositor latency is typically **0–1 frames** (~0–17 ms at 60 Hz) and is consistent across trials, so it does not inflate RT variance but does add a fixed bias.
 - Onset jitter (as measured by the Go monotonic clock) is typically **2–5 ms** on macOS, owing to Metal's internal frame-pacing algorithm.
 
 **Windows**
@@ -936,7 +980,7 @@ Jitter below ±1 frame (±8–17 ms depending on monitor) is normal and expected
 
 **What `OnsetNS` measures**
 
-`TimingLog.OnsetNS` is recorded immediately after `screen.FlipNS()` returns, not at the moment photons reach the screen. On top of the compositor latency noted above, there is additional hardware pipeline latency (GPU scan-out, cable propagation, display panel response) of typically **0–2 frames**. This latency is constant across trials and does not affect within-experiment RT precision, but it must be accounted for if absolute (photodiode-verified) onset times are required.
+`TimingLog.OnsetNS` is recorded immediately after `screen.FlipTS()` returns, not at the moment photons reach the screen. On top of the compositor latency noted above, there is additional hardware pipeline latency (GPU scan-out, cable propagation, display panel response) of typically **0–2 frames**. This latency is constant across trials and does not affect within-experiment RT precision, but it must be accounted for if absolute (photodiode-verified) onset times are required.
 
 **Minimum duration**
 
@@ -1277,7 +1321,7 @@ if err != nil { log.Fatal(err) }
 defer out.Close()
 
 // In the trial loop:
-onset, _ := exp.ShowNS(stim)
+onset, _ := exp.ShowTS(stim)
 out.Pulse(0, 10*time.Millisecond)  // 10 ms pulse on line 0 = EEG event marker
 ```
 
@@ -1293,7 +1337,7 @@ box.PulseMask(0b00000011, 5*time.Millisecond)  // lines 0 and 1 simultaneously
 
 ### Timing advice
 
-The output pulse should be sent as close as possible to `exp.ShowNS(stim)`. Because both `Screen.FlipNS` and the trigger output use the system's real-time clock, the latency between the VSYNC flip and the TTL edge is typically under 1 ms. The EEG amplifier records this edge, and the exact onset can be recovered by subtracting `int64(triggerEdgeNS - onsetNS)` if the amplifier's sample clock is synchronised.
+The output pulse should be sent as close as possible to `exp.ShowTS(stim)`. Because both `Screen.FlipTS` and the trigger output use the system's real-time clock, the latency between the VSYNC flip and the TTL edge is typically under 1 ms. The EEG amplifier records this edge, and the exact onset can be recovered by subtracting `int64(triggerEdgeNS - onsetNS)` if the amplifier's sample clock is synchronised.
 
 ### Reading response inputs (FORP pads)
 
@@ -1339,7 +1383,108 @@ resp, _ := rd.WaitResponse(ctx)
 
 ---
 
-## 16. Putting It All Together
+## 16. Display Compositor Bypass {#compositor-bypass}
+
+A compositing window manager (compositor) intercepts every application
+frame and blends it with other on-screen elements before sending the
+result to the display. This introduces additional latency and jitter
+that are problematic for millisecond-accurate stimulus presentation. The
+degree to which `goxpyriment` can avoid this overhead depends on the
+operating system.
+
+On **Linux with X11**, SDL3 automatically sets the
+`_NET_WM_BYPASS_COMPOSITOR` window property when the application enters
+fullscreen mode. Compliant compositors (KWin, Mutter, Compton) respond
+by *unredirecting* the fullscreen window — routing its framebuffer
+directly to the display scan-out pipeline without compositing. The
+result is presentation latency below 1 ms, comparable to a
+compositor-free session. On **Linux with Wayland**, the compositor is
+always the intermediary for frame delivery, but modern compositors
+(KWin 5.21+, GNOME Mutter 44+) support *direct scan-out* for fullscreen
+applications, achieving similar low-latency behavior in practice. The
+best achievable timing on Linux is obtained by running without any
+display server: setting the environment variable
+`SDL_VIDEO_DRIVER=kmsdrm` before launching the experiment directs SDL3
+to communicate with the Linux KMS/DRM subsystem directly, bypassing X11
+and Wayland entirely. This configuration — typically used from a virtual
+terminal (`Ctrl+Alt+F2`) — is recommended for the most demanding timing
+requirements such as single-frame subliminal stimulation or
+high-frequency RSVP.
+
+On **Windows**, SDL3's fullscreen mode creates an exclusive fullscreen
+surface that bypasses the Desktop Window Manager (DWM), again yielding
+frame-interval jitter typically below 0.3 ms (one standard deviation),
+comparable to Linux.
+
+**macOS** is the exception. Apple's Metal rendering pipeline always
+delivers frames to the display through the WindowServer compositor, and
+no third-party application can bypass it — even in fullscreen. The
+WindowServer typically adds one frame of fixed latency (8–17 ms
+depending on refresh rate) and 2–5 ms of frame-interval jitter. This
+onset uncertainty — larger than many SOAs of experimental interest —
+makes macOS unsuitable for production data collection. Researchers
+should prefer Linux or Windows hardware for laboratory deployments of
+`goxpyriment`; macOS is adequate for pilot testing and paradigm
+development.
+
+These platform differences can be quantified empirically with the
+`display` and `frames` sub-tests of the bundled `Timing-Tests` suite.
+
+---
+
+## 17. Variable Refresh Rate (VRR) Stimulus Presentation {#vrr}
+
+Standard displays refresh at a fixed rate (e.g., 60 Hz), which quantises
+every stimulus duration to multiples of the frame period (16.67 ms at
+60 Hz). A researcher wishing to present a stimulus for 10 ms, 17 ms, or
+23 ms cannot do so on such a display without relying on temporal
+dithering or hardware frame-blending techniques that introduce their own
+artefacts. Variable Refresh Rate (VRR) technology — marketed as AMD
+FreeSync, NVIDIA G-Sync, or the VESA Adaptive-Sync standard — removes
+this constraint by allowing the display to hold each frame for an
+arbitrary duration and refresh only when instructed to do so by the GPU.
+
+`goxpyriment` exposes VRR through a single API call:
+`exp.Screen.SetVSync(0)` disables the VSYNC block, so that every
+subsequent `SDL_RenderPresent` call returns immediately. The following
+pattern then achieves arbitrary stimulus durations with duration error
+typically below 0.5 ms (one standard deviation):
+
+1. Draw the stimulus and call `screen.FlipTS()`, which presents the
+   frame and records `onsetNS` (an SDL nanosecond timestamp)
+   immediately after `Present()` returns.
+
+2. Busy-wait for the desired duration *d*: spin until
+   `time.Now() >= onset + d`. The last ~500 µs use a CPU spin loop
+   (already used in the trigger timing routines) to eliminate OS
+   scheduling jitter.
+
+3. Draw the blank screen, call `FlipTS` again to record `offsetNS`.
+
+The actual software-controlled duration is
+`(offsetNS - onsetNS) / 1e6` ms. On a VRR-capable display this equals
+the true on-screen duration plus a small, constant hardware pipeline
+latency (GPU scan-out and panel response, typically 1–5 ms) that can be
+calibrated once with a photodiode using the `frames` timing sub-test of
+the `Timing-Tests` suite.
+
+Every VRR panel supports VRR only within a finite refresh-rate window
+(e.g., 48–144 Hz, corresponding to frame durations of 6.9–20.8 ms for
+a typical gaming monitor). Durations outside this window cause the panel
+to revert to fixed-rate behaviour, re-introducing quantisation. The
+`Timing-Tests` suite includes a dedicated `vrr` sub-test that sweeps
+target durations from 1 ms to a user-specified maximum in 1 ms steps and
+reports duration errors at each step, directly revealing the panel's VRR
+window in the output data.
+
+On a display without VRR support, disabling VSYNC produces frame
+tearing. The `vrr` sub-test detects this automatically: on a non-VRR
+display the duration errors cluster at multiples of the frame period
+rather than being uniformly small, providing an unambiguous diagnostic.
+
+---
+
+## 18. Putting It All Together
 
 Here is a skeleton that illustrates how the concepts compose in a realistic experiment:
 

@@ -278,10 +278,10 @@ func main() {
 			// Show target; capture VSYNC-aligned onset timestamp
 			drawScene(crossBlack, false, false)
 			_ = target.Draw(exp.Screen)
-			onsetNS, _ := exp.Screen.FlipNS()
+			onsetNS, _ := exp.Screen.FlipTS()
 
 			// Response window spans TargetDisplayMS + MaxResponseMS from onset
-			key, eventTS, kErr := exp.Keyboard.WaitKeysEventRT(
+			key, eventTS, kErr := exp.Keyboard.GetKeyEventTS(
 				[]control.Keycode{LeftKey, RightKey},
 				TargetDisplayMS+MaxResponseMS,
 			)
