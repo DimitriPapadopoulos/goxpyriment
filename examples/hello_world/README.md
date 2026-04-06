@@ -1,6 +1,6 @@
 # Hello World
 
-A minimal standalone goxpyriment example that can be copied outside the repository and built without the `go.work` workspace. It shows a coloured rectangle on screen and waits for a key press.
+A minimal standalone goxpyriment example.
 
 Use this as a starting point if you want to develop an experiment in its own separate Go module.
 

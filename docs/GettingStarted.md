@@ -54,31 +54,22 @@ import (
 )
 
 func main() {
-    // NewExperimentFromFlags parses -w (windowed 1024×768), -d N (display index), and -s <subjectID>.
     exp := control.NewExperimentFromFlags("SimpleTrial", control.Black, control.White, 32)
     defer exp.End()
 
     fixation := stimuli.NewFixCross(20, 3, control.White)
     target   := stimuli.NewCircle(50, control.White)
 
-    err := exp.Run(func() error {
-        exp.ShowInstructions("Press SPACE when you see the circle.")
+    exp.ShowInstructions("Press SPACE when you see the circle.")
 
-        exp.Show(fixation)
-        exp.Wait(500)          // hold fixation for 500 ms
+    exp.Show(fixation)
+    exp.Wait(500)          // hold fixation for 500 ms
 
-        exp.Show(target)
-        exp.Keyboard.WaitKey(control.K_SPACE)
-
-        return control.EndLoop
-    })
-    if err != nil && !control.IsEndLoop(err) {
-        log.Fatalf("experiment error: %v", err)
-    }
+    exp.Show(target)
+    exp.Keyboard.WaitKey(control.K_SPACE)
 }
 ```
 
-> **Pro Tip**: You don't need `if err != nil` after every call inside `exp.Run`. If you press `ESC`, the library aborts the trial loop gracefully via a panic/recover mechanism, saving your data and exiting cleanly. Only check errors you actually want to handle differently.
 
 ---
 
@@ -137,7 +128,9 @@ func main() {
 }
 ```
 
-The `.csv` file (a CSV with a metadata header) is written to `~/goxpy_data/` automatically when the experiment ends. Each row gets the subject ID and a timestamp for free.
+
+exp.Run handles the detection of the ESC keypress to interrupt the experiment.
+The `.csv` result file (a CSV with a metadata header) is written to `~/goxpy_data/` automatically when the experiment ends. Each row gets the subject ID and a timestamp for free.
 
 ---
 

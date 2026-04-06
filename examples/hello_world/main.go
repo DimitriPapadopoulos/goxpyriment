@@ -1,17 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"github.com/chrplr/goxpyriment/control"
+	"github.com/chrplr/goxpyriment/stimuli"
 )
 
 func main() {
-	fmt.Println("Start")
-	exp := control.NewExperimentFromFlags("My First", control.Black, control.White, 32)
-	fmt.Println("Init done")
-	exp.Run(func() error {
-		fmt.Println("Logic start")
-		return control.EndLoop
-	})
-	fmt.Println("End")
+      exp := control.NewExperimentFromFlags("Hello World", control.Black, control.White, 32)
+      defer exp.End()
+
+      hello := stimuli.NewTextBox("Hello, World!", 600, control.FPoint{}, control.White)
+      exp.Show(hello)
+      exp.Keyboard.Wait()
 }

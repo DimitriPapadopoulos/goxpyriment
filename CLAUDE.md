@@ -57,6 +57,21 @@ go build ./...
 
 Most examples accept `-w` for windowed mode (1024×768 window), `-d N` for display selection (monitor index, -1 = primary), and `-s <id>` for subject ID.
 
+### Raspberry Pi — fullscreen rendering workaround
+
+On Raspberry Pi (tested: Ubuntu 25.10 + GNOME/Wayland), fullscreen mode renders nothing (gray screen) while windowed mode works correctly. The SDL3 exclusive-fullscreen path does not properly attach the renderer to the visible framebuffer under the Pi's V3D/KMS stack. Workaround: force the software render driver and Wayland video driver:
+
+```bash
+SDL_RENDER_DRIVER=software SDL_VIDEODRIVER=wayland go run main.go
+```
+
+A convenience wrapper `examples/run_pi.sh` is available:
+
+```bash
+#!/bin/bash
+SDL_RENDER_DRIVER=software SDL_VIDEODRIVER=wayland go run "$@"
+```
+
 Verification is typically manual: build the package, then run an example with a real display. However, core logic in packages like `control` have unit tests (`go test ./control`).
 
 ### Module / workspace layout

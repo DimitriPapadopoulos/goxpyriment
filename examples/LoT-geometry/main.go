@@ -43,7 +43,7 @@ func NewSequence(name string, base []int) Sequence {
 }
 
 // drawEnvironment renders stimuli directly on the main thread (inside exp.Run).
-func drawEnvironment(exp *control.Experiment, dots []*stimuli.Circle, fixation *stimuli.FixCross, target *stimuli.Circle, activeIdx int) error {
+func drawEnvironment(exp *control.Experiment, dots []*stimuli.Circle, fixation *stimuli.FixCross, target *stimuli.Circle, octagonPoints []control.FPoint, activeIdx int) error {
 	if err := exp.Screen.Clear(); err != nil {
 		return err
 	}
@@ -59,6 +59,7 @@ func drawEnvironment(exp *control.Experiment, dots []*stimuli.Circle, fixation *
 	}
 	// Draw target if activeIdx >= 0
 	if activeIdx >= 0 {
+		target.SetPosition(octagonPoints[activeIdx])
 		if err := target.Draw(exp.Screen); err != nil {
 			return err
 		}
@@ -66,13 +67,13 @@ func drawEnvironment(exp *control.Experiment, dots []*stimuli.Circle, fixation *
 	return exp.Screen.Update()
 }
 
-func flashSequence(exp *control.Experiment, dots []*stimuli.Circle, fixation *stimuli.FixCross, target *stimuli.Circle, indices []int) error {
+func flashSequence(exp *control.Experiment, dots []*stimuli.Circle, fixation *stimuli.FixCross, target *stimuli.Circle, octagonPoints []control.FPoint, indices []int) error {
 	for _, idx := range indices {
-		if err := drawEnvironment(exp, dots, fixation, target, idx); err != nil {
+		if err := drawEnvironment(exp, dots, fixation, target, octagonPoints, idx); err != nil {
 			return err
 		}
 		exp.Wait(500)
-		if err := drawEnvironment(exp, dots, fixation, target, -1); err != nil {
+		if err := drawEnvironment(exp, dots, fixation, target, octagonPoints, -1); err != nil {
 			return err
 		}
 		exp.Wait(100)
@@ -83,7 +84,7 @@ func flashSequence(exp *control.Experiment, dots []*stimuli.Circle, fixation *st
 func getGuess(exp *control.Experiment, dots []*stimuli.Circle, fixation *stimuli.FixCross, octagonPoints []control.FPoint) (int, int64, error) {
 	startTime := clock.GetTime()
 	// Ensure screen is updated with dots and fixation
-	if err := drawEnvironment(exp, dots, fixation, nil, -1); err != nil {
+	if err := drawEnvironment(exp, dots, fixation, nil, octagonPoints, -1); err != nil {
 		return -1, 0, err
 	}
 
@@ -194,7 +195,7 @@ func main() {
 				// A. Flash sequence only at trial start or after an error.
 				// On a correct streak the subject continues directly to the next guess.
 				if needsFlash {
-					flashSequence(exp, dots, fixation, target, indices[:currentKnownCount])
+					flashSequence(exp, dots, fixation, target, octagonPoints, indices[:currentKnownCount])
 				}
 
 				// B. Wait for guess
@@ -213,7 +214,7 @@ func main() {
 					// Correct: brief feedback, then ask for the next location immediately
 					// (no re-flash — subject continues in the streak).
 					stimuli.PlayPing(exp.AudioDevice)
-					drawEnvironment(exp, dots, fixation, target, targetIdx)
+					drawEnvironment(exp, dots, fixation, target, octagonPoints, targetIdx)
 					exp.Wait(300)
 					currentKnownCount++
 					needsFlash = false
@@ -221,13 +222,13 @@ func main() {
 					// Error: show the correct location, then re-flash the full sequence
 					// (including the just-corrected item) before the next guess.
 					stimuli.PlayBuzzer(exp.AudioDevice)
-					drawEnvironment(exp, dots, fixation, target, targetIdx)
+					drawEnvironment(exp, dots, fixation, target, octagonPoints, targetIdx)
 					exp.Wait(500)
 					currentKnownCount = step + 1
 					needsFlash = true
 				}
 
-				drawEnvironment(exp, dots, fixation, target, -1)
+				drawEnvironment(exp, dots, fixation, target, octagonPoints, -1)
 				exp.Wait(500)
 			}
 
