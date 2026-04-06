@@ -52,4 +52,9 @@ pandoc API.md "${PANDOC_OPTS[@]}" \
   -o API.pdf
 echo "  ✓ API.pdf"
 
+pandoc TimingTests.md "${PANDOC_OPTS[@]}" \
+  -V title="goxpyriment — Timing Tests" \
+  -o TimingTests.pdf
+
+
 echo "Done. Commit the PDFs and push — they will be published via GitHub Actions."

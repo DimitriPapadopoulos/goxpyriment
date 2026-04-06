@@ -2,9 +2,7 @@
 
 This document explains how to use the `Timing-Tests` program to characterise
 the timing behaviour of your computer before running a psychophysical
-experiment. It is written for researchers who are familiar with experimental
-psychology but may not have a deep background in systems programming or
-hardware.
+experiment. 
 
 > **Quick reference** — command-line flags, equipment table, and one-liner
 > descriptions of each test are in
@@ -60,10 +58,12 @@ Run the tests in this order. Each tier builds on the previous one.
 
 ## Understanding the display refresh cycle
 
-Modern monitors do not display pixels continuously. They refresh at a fixed
-rate — typically 60 Hz (one new frame every 16.67 ms), 120 Hz, or 144 Hz.
-Your graphics driver synchronises stimulus presentation to this cycle (VSYNC).
-This has two important consequences:
+The majority of display monitors refresh the image at a fixed rate —
+typically 60 Hz (one new frame every 16.67 ms), 120 Hz, or 144 Hz
+(Others, especially gaming monitors, have variable refresh rate
+displays, we discuss them below).  Your graphics driver synchronises
+stimulus presentation to this cycle (VSYNC).  This has two important
+consequences:
 
 - **Stimulus durations are quantised to multiples of the frame duration.**
   At 60 Hz you can show a stimulus for 16.67 ms, 33.33 ms, 50 ms, etc., but
@@ -84,7 +84,7 @@ This has two important consequences:
 Before any measurement, verify that the basic hardware is responding:
 
 ```bash
-go run tests/Timing-Tests/main.go -test check -w
+go run tests/Timing-Tests/main.go -test check 
 ```
 
 The program will:
@@ -104,7 +104,7 @@ is not your speakers.
 ### `display` — frame timing and refresh rate
 
 ```bash
-go run tests/Timing-Tests/main.go -test display -duration-s 30 -w
+go run tests/Timing-Tests/main.go -test display -duration-s 30 
 ```
 
 This test flips a gray screen continuously for the specified duration and
@@ -147,7 +147,7 @@ presentation. An SD above 0.5 ms or many outlier frames indicate problems.
 ### `latency` — audio pipeline delay
 
 ```bash
-go run tests/Timing-Tests/main.go -test latency -w
+go run tests/Timing-Tests/main.go -test latency 
 ```
 
 When you call `tone.Play()` in goxpyriment, the PCM audio data is placed into
@@ -197,7 +197,7 @@ latency by:
 ### `stream` — RSVP sequential-stimulus timing
 
 ```bash
-go run tests/Timing-Tests/main.go -test stream -cycles 120 -frames-per-phase 3 -isi-frames 3 -w
+go run tests/Timing-Tests/main.go -test stream -cycles 120 -frames-per-phase 3 -isi-frames 3 
 ```
 
 Many paradigms in cognitive psychology use *rapid serial visual presentation*
@@ -256,7 +256,7 @@ duration_ms, duration_error_ms, interval_ms, interval_error_ms, trigger`.
 ### `vrr` — Variable Refresh Rate duration sweep
 
 ```bash
-go run tests/Timing-Tests/main.go -test vrr -vrr-max-ms 50 -cycles 5 -w
+go run tests/Timing-Tests/main.go -test vrr -vrr-max-ms 50 -cycles 5 
 ```
 
 #### Background: why fixed refresh is a problem
@@ -490,7 +490,7 @@ Single-frame stimuli are impossible on that system without driver changes.
 ### `tones` — audio onset jitter over a long session
 
 ```bash
-go run tests/Timing-Tests/main.go -test tones -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450 -w
+go run tests/Timing-Tests/main.go -test tones -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450
 ```
 
 This test plays a long sequence of identical sine tones and measures, for each
@@ -527,7 +527,7 @@ actual_offset_ms, ioi_ms, ioi_error_ms, trigger_sent`.
 ### `av` — audio–visual synchrony
 
 ```bash
-go run tests/Timing-Tests/main.go -test av -soa-ms 0 -freq-hz 1000 -tone-ms 50 -iti-ms 1000 -cycles 30 -w
+go run tests/Timing-Tests/main.go -test av -soa-ms 0 -freq-hz 1000 -tone-ms 50 -iti-ms 1000 -cycles 30 
 ```
 
 This test presents pairs of audio and visual stimuli with a controlled
@@ -562,7 +562,7 @@ t_audio_queued_ms, soa_intended_ms, soa_actual_ms`.
 ### `rt` — reaction-time timestamp precision
 
 ```bash
-go run tests/Timing-Tests/main.go -test rt -cycles 60 -iti-ms 1000 -w
+go run tests/Timing-Tests/main.go -test rt -cycles 60 -iti-ms 1000 
 ```
 
 This test measures the precision of reaction-time measurement itself. Each
@@ -644,10 +644,10 @@ For the `stream` test, onset jitter and SOA error are directly in the
 **macOS:**
 - The macOS WindowServer compositor is always active; expect 1–3 ms frame
   jitter and one frame of fixed display latency.
-- Run in fullscreen mode (omit `-w`) to give SDL exclusive GPU access.
+- Always run in fullscreen mode.
 
 **Windows:**
-- Run in fullscreen exclusive mode (omit `-w`) to bypass DWM composition.
+- Run in fullscreen exclusive mode to bypass DWM composition.
 - Disable "Hardware-Accelerated GPU Scheduling" in Display Settings if you
   observe high frame jitter.
 
@@ -661,13 +661,13 @@ It must be set before the audio device opens.
 
 ```bash
 # Default (platform-dependent, often 512–2048 samples):
-go run tests/Timing-Tests/main.go -test latency -w
+go run tests/Timing-Tests/main.go -test latency
 
 # Aggressive low-latency (~5.8 ms at 44100 Hz):
-go run tests/Timing-Tests/main.go -test latency -audio-frames 256 -drain-reps 20 -w
+go run tests/Timing-Tests/main.go -test latency -audio-frames 256 -drain-reps 20
 
 # Conservative (~46 ms, stable on any system):
-go run tests/Timing-Tests/main.go -test latency -audio-frames 2048 -w
+go run tests/Timing-Tests/main.go -test latency -audio-frames 2048
 ```
 
 On startup the program prints the actual device format:
@@ -681,18 +681,15 @@ subsequent tests and for your actual experiment.
 
 ---
 
-## DLP-IO8 vs DLP-IO8-G
+## DLP-IO8
 
-Both models use the same ASCII command protocol over USB-CDC and are
-interchangeable in this software. The **-G** (galvanically isolated) variant
-adds optocoupler isolation between the USB side and the I/O pins, protecting
-the computer from ground loops and voltage transients. This is strongly
-recommended when the device is connected to EEG or MEG amplifiers.
+See https://github.com/chrplr/dlp-io8-g
+
 
 ## Parallel port alternative
 
-If you have a legacy parallel port (LPT), use
-`triggers.NewParallelPort("/dev/parport0")` in your experiment code. The
-`Send(byte)` method sets all 8 data lines simultaneously. Latency is
-sub-millisecond (< 10 µs with direct `ioctl`), far better than USB-serial.
-Prerequisites: `sudo modprobe ppdev` and membership in the `lp` group.
+If you have a parallel port (LPT) at `/dev/parport0`, use
+`triggers.NewParallelPort("/dev/parport0")` in your experiment
+code. The `Send(byte)` method sets all 8 data lines simultaneously.
+Linux Prerequisites: `sudo modprobe ppdev` and membership in the `lp`
+group

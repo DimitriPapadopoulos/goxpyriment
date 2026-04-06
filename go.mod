@@ -3,7 +3,7 @@ module github.com/chrplr/goxpyriment
 go 1.25.7
 
 require (
-	github.com/Zyko0/go-sdl3 v0.1.0
+	github.com/Zyko0/go-sdl3 v0.1.1
 	github.com/funatsufumiya/go-gv-video v0.0.2
 	github.com/gen2brain/mpeg v0.5.0
 	go.bug.st/serial v1.6.4

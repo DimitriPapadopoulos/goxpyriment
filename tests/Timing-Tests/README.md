@@ -39,22 +39,20 @@ Step 11 requires a keyboard or USB response box.
 go run tests/Timing-Tests/main.go -test <name> [flags]
 
 # examples
-go run tests/Timing-Tests/main.go -test check  -w
-go run tests/Timing-Tests/main.go -test display -duration-s 30 -w
-go run tests/Timing-Tests/main.go -test latency -w
-go run tests/Timing-Tests/main.go -test stream  -cycles 120 -frames-per-phase 3 -isi-frames 3 -w
-go run tests/Timing-Tests/main.go -test vrr     -vrr-max-ms 50 -cycles 5 -w
+go run tests/Timing-Tests/main.go -test check  
+go run tests/Timing-Tests/main.go -test display -duration-s 30 
+go run tests/Timing-Tests/main.go -test latency 
+go run tests/Timing-Tests/main.go -test stream  -cycles 120 -frames-per-phase 3 -isi-frames 3 
+go run tests/Timing-Tests/main.go -test vrr     -vrr-max-ms 50 -cycles 5 
 go run tests/Timing-Tests/main.go -test trigger -period-ms 100 -duty 50 -duration-s 30
 go run tests/Timing-Tests/main.go -test frames  -frames-per-phase 2 -cycles 120
 go run tests/Timing-Tests/main.go -test flash   -isi-frames 60 -cycles 60
-go run tests/Timing-Tests/main.go -test tones   -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450 -w
-go run tests/Timing-Tests/main.go -test av      -soa-ms 0 -cycles 30 -w
-go run tests/Timing-Tests/main.go -test rt      -cycles 60 -w
+go run tests/Timing-Tests/main.go -test tones   -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450 
+go run tests/Timing-Tests/main.go -test av      -soa-ms 0 -cycles 30 
+go run tests/Timing-Tests/main.go -test rt      -cycles 60 
 ```
 
-Add `-w` for a 1024×768 window instead of fullscreen.
-Remove `-w` for fullscreen on the primary display.
-Use `-d N` to select a specific monitor (0-indexed; -1 = primary).
+Use `-d N` to select a specific monitor (0-indexed).
 
 Legacy names (`jitter`, `drain`, `square`, `sound`, `audio`) still work as aliases.
 
@@ -85,14 +83,14 @@ Legacy names (`jitter`, `drain`, `square`, `sound`, `audio`) still work as alias
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-test` | *(required)* | Sub-test name |
-| `-w` | false | Windowed mode (1024×768) instead of fullscreen |
+| `` | false | Windowed mode (1024×768) instead of fullscreen |
 | `-d N` | -1 | Monitor index (-1 = primary) |
 | `-port` | auto | Serial port for DLP-IO8-G |
 | `-trigger-pin` | 1 | DLP-IO8-G output pin (1–8) |
 | `-trigger-ms` | 5 | Trigger pulse duration (ms) |
 | `-cycles` | 60 | Number of elements / flashes / trials |
 | `-hz` | 60.0 | Expected refresh rate (Hz); run `display` first to measure the true value |
-| `-warmup` | 10 | Elements excluded from statistics at start |
+| `armup` | 10 | Elements excluded from statistics at start |
 | `-audio-frames` | SDL default | Hardware audio buffer size in sample frames (e.g. 256, 512, 2048) |
 
 ### Per-test flags
@@ -104,7 +102,7 @@ Legacy names (`jitter`, `drain`, `square`, `sound`, `audio`) still work as alias
 | `-frames-per-phase` | frames, stream | 2 | Bright frames per element |
 | `-isi-frames` | flash, stream | 60 | Dark frames per ISI |
 | `-duration-s` | display, trigger | 10 | Measurement duration (s) |
-| `-period-ms` | trigger | 100 | Square-wave period (ms) |
+| `-period-ms` | trigger | 100 | Squareave period (ms) |
 | `-duty` | trigger | 50 | Duty cycle (%) |
 | `-soa-ms` | av | 0 | Audio-before-visual SOA (ms); negative = audio first |
 | `-iti-ms` | av, tones, rt | 1000 | Inter-trial interval (ms) |
