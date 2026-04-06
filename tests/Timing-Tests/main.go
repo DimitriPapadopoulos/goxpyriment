@@ -100,8 +100,11 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"os"
+	"os/signal"
 	"runtime/debug"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/chrplr/goxpyriment/clock"
@@ -1351,6 +1354,15 @@ func main() {
 		log.Fatalf("failed to initialize experiment: %v", err)
 	}
 	defer exp.End()
+
+	// Handle Ctrl-C (SIGINT) and SIGTERM so the process exits cleanly.
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+		<-ch
+		exp.End()
+		os.Exit(0)
+	}()
 
 	if *fTest == "" {
 		log.Fatal("usage: go run main.go -test <check|display|latency|stream|vrr|trigger|frames|flash|tones|av|rt> [flags]\n" +

@@ -1,5 +1,8 @@
-// Copyright (2026) Christophe Pallier <christophe@pallier.org>
-// Distributed under the GNU General Public License v3.
+---
+title: Migrating to goxpyriment
+author: Claude Sonnet and Christophe Pallier
+date: 2026-06-04
+---
 
 # Migrating to goxpyriment
 

@@ -1,3 +1,9 @@
+---
+title: Timing-Tests
+author: <christophe@pallier.org>
+date: 2026-04-06
+---
+
 # Timing-Tests: A Guide for Researchers
 
 This document explains how to use the `Timing-Tests` program to characterise
@@ -54,6 +60,13 @@ Tier 4 — rt         how precise is my reaction-time measurement?
 
 Run the tests in this order. Each tier builds on the previous one.
 
+These tests are run from a Terminal. This document assumes that you have compiled `Timing-Tests/main.go`:
+
+```sh
+go build tests/Timing-Tests/main.go -o Timing-Tests
+```
+
+
 ---
 
 ## Understanding the display refresh cycle
@@ -84,7 +97,7 @@ consequences:
 Before any measurement, verify that the basic hardware is responding:
 
 ```bash
-go run tests/Timing-Tests/main.go -test check 
+Timing-Tests -test check 
 ```
 
 The program will:
@@ -104,7 +117,7 @@ is not your speakers.
 ### `display` — frame timing and refresh rate
 
 ```bash
-go run tests/Timing-Tests/main.go -test display -duration-s 30 
+Timing-Tests -test display -duration-s 30 
 ```
 
 This test flips a gray screen continuously for the specified duration and
@@ -147,7 +160,7 @@ presentation. An SD above 0.5 ms or many outlier frames indicate problems.
 ### `latency` — audio pipeline delay
 
 ```bash
-go run tests/Timing-Tests/main.go -test latency 
+Timing-Tests -test latency 
 ```
 
 When you call `tone.Play()` in goxpyriment, the PCM audio data is placed into
@@ -197,7 +210,7 @@ latency by:
 ### `stream` — RSVP sequential-stimulus timing
 
 ```bash
-go run tests/Timing-Tests/main.go -test stream -cycles 120 -frames-per-phase 3 -isi-frames 3 
+Timing-Tests -test stream -cycles 120 -frames-per-phase 3 -isi-frames 3 
 ```
 
 Many paradigms in cognitive psychology use *rapid serial visual presentation*
@@ -256,7 +269,7 @@ duration_ms, duration_error_ms, interval_ms, interval_error_ms, trigger`.
 ### `vrr` — Variable Refresh Rate duration sweep
 
 ```bash
-go run tests/Timing-Tests/main.go -test vrr -vrr-max-ms 50 -cycles 5 
+Timing-Tests -test vrr -vrr-max-ms 50 -cycles 5 
 ```
 
 #### Background: why fixed refresh is a problem
@@ -398,7 +411,7 @@ Option "VariableRefresh" "true"
 ### `trigger` — DLP-IO8-G precision
 
 ```bash
-go run tests/Timing-Tests/main.go -test trigger -period-ms 100 -duty 50 -duration-s 30 -trigger-pin 1
+Timing-Tests -test trigger -period-ms 100 -duty 50 -duration-s 30 -trigger-pin 1
 ```
 
 The DLP-IO8-G communicates over a USB-CDC virtual serial port at 115 200 baud.
@@ -443,7 +456,7 @@ The tests in this tier require a photodiode taped to the corner of your screen
 ### `frames` — visual onset vs. trigger alignment
 
 ```bash
-go run tests/Timing-Tests/main.go -test frames -frames-per-phase 2 -cycles 120 -hz 59.94
+Timing-Tests -test frames -frames-per-phase 2 -cycles 120 -hz 59.94
 ```
 
 This test alternates between a dark screen (luminance `-level-a`) and a bright
@@ -471,7 +484,7 @@ for dropped frames.
 ### `flash` — single-frame precision
 
 ```bash
-go run tests/Timing-Tests/main.go -test flash -isi-frames 60 -cycles 60 -hz 59.94
+Timing-Tests -test flash -isi-frames 60 -cycles 60 -hz 59.94
 ```
 
 This test verifies that your system can present a stimulus that lasts exactly
@@ -490,7 +503,7 @@ Single-frame stimuli are impossible on that system without driver changes.
 ### `tones` — audio onset jitter over a long session
 
 ```bash
-go run tests/Timing-Tests/main.go -test tones -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450
+Timing-Tests -test tones -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450
 ```
 
 This test plays a long sequence of identical sine tones and measures, for each
@@ -527,7 +540,7 @@ actual_offset_ms, ioi_ms, ioi_error_ms, trigger_sent`.
 ### `av` — audio–visual synchrony
 
 ```bash
-go run tests/Timing-Tests/main.go -test av -soa-ms 0 -freq-hz 1000 -tone-ms 50 -iti-ms 1000 -cycles 30 
+Timing-Tests -test av -soa-ms 0 -freq-hz 1000 -tone-ms 50 -iti-ms 1000 -cycles 30 
 ```
 
 This test presents pairs of audio and visual stimuli with a controlled
@@ -562,7 +575,7 @@ t_audio_queued_ms, soa_intended_ms, soa_actual_ms`.
 ### `rt` — reaction-time timestamp precision
 
 ```bash
-go run tests/Timing-Tests/main.go -test rt -cycles 60 -iti-ms 1000 
+Timing-Tests -test rt -cycles 60 -iti-ms 1000 
 ```
 
 This test measures the precision of reaction-time measurement itself. Each
@@ -636,7 +649,7 @@ For the `stream` test, onset jitter and SOA error are directly in the
   start the experiment from a virtual terminal (`Ctrl+Alt+F2`).
 - Run the experiment process with real-time scheduling:
   ```bash
-  chrt -r 99 go run tests/Timing-Tests/main.go -test display -duration-s 30
+  chrt -r 99 Timing-Tests -test display -duration-s 30
   ```
 - Reduce USB trigger latency (see DLP-IO8-G section above).
 - Disable CPU frequency scaling: `cpupower frequency-set -g performance`.
@@ -661,13 +674,13 @@ It must be set before the audio device opens.
 
 ```bash
 # Default (platform-dependent, often 512–2048 samples):
-go run tests/Timing-Tests/main.go -test latency
+Timing-Tests -test latency
 
 # Aggressive low-latency (~5.8 ms at 44100 Hz):
-go run tests/Timing-Tests/main.go -test latency -audio-frames 256 -drain-reps 20
+Timing-Tests -test latency -audio-frames 256 -drain-reps 20
 
 # Conservative (~46 ms, stable on any system):
-go run tests/Timing-Tests/main.go -test latency -audio-frames 2048
+Timing-Tests -test latency -audio-frames 2048
 ```
 
 On startup the program prints the actual device format:

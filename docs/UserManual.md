@@ -1,3 +1,9 @@
+---
+title: Goxpyriment User's Manual
+author: <christophe@pallier.org>
+date: 2026-04-06
+---
+
 # goxpyriment User's Manual
 
 This manual explains the key concepts of the library. It assumes you have read the [Getting Started](GettingStarted.md) guide and want to understand the framework well enough to write experiments confidently.

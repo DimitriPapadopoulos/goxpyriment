@@ -1,3 +1,10 @@
+---
+title: Getting Started with goxpyriment
+author: Christophe Pallier <christophe@pallier.org>
+date: 2026-04-06
+---
+
+
 # Getting Started with goxpyriment
 
 Welcome! If you are a psychologist or neuroscientist used to building experiments in Python (with **Expyriment** or **PsychoPy**), you are in the right place.
