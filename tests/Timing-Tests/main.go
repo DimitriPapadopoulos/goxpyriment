@@ -36,7 +36,7 @@
 //
 // Usage:
 //
-//	go run main.go -test <name> [flags] [-d]
+//	go run main.go -test <name> [flags]
 //
 // Common flags:
 //
@@ -45,7 +45,8 @@
 //	-trigger-pin int  Output pin on DLP-IO8-G (default 1)
 //	-trigger-ms  int  Trigger pulse duration in ms (default 5)
 //	-cycles int       Number of cycles / flashes (default 60)
-//	-d                Developer mode: windowed 1024×768
+//	-w                Windowed mode: 1024×768 window instead of fullscreen
+//	-d int            Display index: monitor to use (-1 = primary, default -1)
 //
 // Per-test flags — rt:
 //
@@ -133,6 +134,8 @@ var (
 	fWarmup         = flag.Int("warmup", 10, "Frames to discard at the start of visual tests before recording statistics")
 	fDrainReps      = flag.Int("drain-reps", 10, "Repetitions per tone duration [drain test]")
 	fVRRMaxMs       = flag.Int("vrr-max-ms", 50, "Maximum stimulus duration to sweep in VRR test (ms, in 1 ms steps) [vrr test]")
+	fWindowed       = flag.Bool("w", false, "Windowed mode (1024×768 window instead of fullscreen)")
+	fDisplay        = flag.Int("d", -1, "Display index: monitor where the window/fullscreen will open (-1 = primary)")
 )
 
 // ── Statistics helper ──────────────────────────────────────────────────────────
@@ -1336,7 +1339,17 @@ func main() {
 		fmt.Printf("audio: requesting %d sample frames hardware buffer\n", *fAudioFrames)
 	}
 
-	exp := control.NewExperimentFromFlags("Timing-Tests", control.Black, control.White, 24)
+	width, height, fullscreen := 0, 0, true
+	if *fWindowed {
+		width, height, fullscreen = 1024, 768, false
+	}
+	exp := control.NewExperiment("Timing-Tests", width, height, fullscreen, control.Black, control.White, 24)
+	if *fDisplay >= 0 {
+		exp.ScreenNumber = *fDisplay
+	}
+	if err := exp.Initialize(); err != nil {
+		log.Fatalf("failed to initialize experiment: %v", err)
+	}
 	defer exp.End()
 
 	if *fTest == "" {

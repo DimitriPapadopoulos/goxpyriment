@@ -202,10 +202,40 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 		}, nil
 	}
 
-	// Windowed path: create a hidden window+renderer pair, optionally move to
-	// the target display, then show it.
-	window, renderer, err := sdl.CreateWindowAndRenderer(title, width, height, sdl.WINDOW_HIDDEN)
+	// Windowed path: build window properties with x/y position set at creation
+	// time so that the window manager sees the target-display hint before the
+	// window is mapped. This is more reliable than a post-creation SetPosition
+	// call, particularly on X11. On Wayland, compositors ignore app-supplied
+	// positions for toplevel windows regardless of approach; fullscreen mode
+	// (-d X without -w) is the reliable path there.
+	props, err := sdl.NewProperties(map[string]any{
+		"SDL.window.create.title":  title,
+		"SDL.window.create.width":  int32(width),
+		"SDL.window.create.height": int32(height),
+		"SDL.window.create.hidden": true,
+	})
 	if err != nil {
+		return nil, fmt.Errorf("create window properties: %w", err)
+	}
+	defer props.Destroy()
+
+	if displayIndex != 0 {
+		if bounds, err := target.Bounds(); err == nil && bounds != nil {
+			x := bounds.X + (bounds.W-int32(width))/2
+			y := bounds.Y + (bounds.H-int32(height))/2
+			_ = props.SetNumberProperty("SDL.window.create.x", int64(x))
+			_ = props.SetNumberProperty("SDL.window.create.y", int64(y))
+		}
+	}
+
+	window, err := sdl.CreateWindowWithProperties(props)
+	if err != nil {
+		return nil, err
+	}
+
+	renderer, err := window.CreateRenderer("")
+	if err != nil {
+		window.Destroy()
 		return nil, err
 	}
 
@@ -213,14 +243,6 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 		renderer.Destroy()
 		window.Destroy()
 		return nil, err
-	}
-
-	if displayIndex != 0 {
-		if bounds, err := target.Bounds(); err == nil && bounds != nil {
-			x := bounds.X + (bounds.W-int32(width))/2
-			y := bounds.Y + (bounds.H-int32(height))/2
-			window.SetPosition(x, y)
-		}
 	}
 
 	s := &Screen{
@@ -232,6 +254,7 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 	}
 
 	if err := window.Show(); err != nil {
+		renderer.Destroy()
 		window.Destroy()
 		return nil, err
 	}
