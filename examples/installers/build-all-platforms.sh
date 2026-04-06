@@ -12,15 +12,12 @@
 # Prerequisites:
 #   - Go 1.25+ in PATH
 #   - CGO_ENABLED=0  (set automatically here, override with env if needed)
-#   - examples/installers/appimagetool  (for Linux AppImages)
-#     Download: wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O examples/installers/appimagetool && chmod +x examples/installers/appimagetool
-#   - libfuse2 installed (for appimagetool on Linux)
 #
 # Outputs (all in examples/installers/):
 #   goxpyriment-examples-windows-x86_64.zip
 #   goxpyriment-examples-macos-arm64.zip
-#   goxpyriment-examples-linux-x86_64-appimages.tar.gz
-#   goxpyriment-examples-linux-arm64.tar.gz          (examples + tests, plain binaries)
+#   goxpyriment-examples-linux-x86_64.tar.gz
+#   goxpyriment-examples-linux-arm64.tar.gz
 
 set -euo pipefail
 
@@ -180,75 +177,35 @@ rm -f "${MAC_ZIP}"
 echo "  -> ${MAC_ZIP}"
 
 # =============================================================================
-# 3. Linux x86_64 — AppImages
+# 3. Linux x86_64 — plain binaries: examples + tests
 # =============================================================================
 
-echo "=== Building Linux x86_64 AppImages ==="
-APPDIR_ROOT="${OUT_DIR}/AppImages"
-TOOL="${OUT_DIR}/appimagetool"
-
-if [[ ! -x "${TOOL}" ]]; then
-  echo "ERROR: appimagetool not found at ${TOOL}"
-  echo "Download it with:"
-  echo "  wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O ${TOOL}"
-  echo "  chmod +x ${TOOL}"
-  exit 1
-fi
-
-rm -rf "${APPDIR_ROOT}"
-mkdir -p "${APPDIR_ROOT}"
+echo "=== Building Linux x86_64 binaries ==="
+X86_STAGE="${OUT_DIR}/x86-stage"
+rm -rf "${X86_STAGE}"
+mkdir -p "${X86_STAGE}/tests"
 
 while IFS= read -r dir; do
   name="$(basename "$dir")"
-  echo "  ${name}.AppImage"
-  appdir="${APPDIR_ROOT}/${name}.AppDir"
-  mkdir -p "${appdir}/usr/bin" "${appdir}/usr/share/applications"
-
+  echo "  ${name}"
   GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
-    -o "${appdir}/usr/bin/${name}" \
+    -o "${X86_STAGE}/${name}" \
     "${dir}"
-  chmod +x "${appdir}/usr/bin/${name}"
-
-  cat > "${appdir}/AppRun" <<EOF
-#!/bin/sh
-exec "\${APPDIR}/usr/bin/${name}" "\$@"
-EOF
-  chmod +x "${appdir}/AppRun"
-
-  desktop="${appdir}/usr/share/applications/${name}.desktop"
-  cat > "${desktop}" <<EOF
-[Desktop Entry]
-Type=Application
-Name=${name}
-Exec=${name}
-Icon=${name}
-Categories=Education;
-EOF
-  cp "${desktop}" "${appdir}/${name}.desktop"
-
-  if [[ -f "${ASSETS_DIR}/icon_256.png" ]]; then
-    cp "${ASSETS_DIR}/icon_256.png" "${appdir}/${name}.png"
-  fi
-
-  ARCH=x86_64 "${TOOL}" "${appdir}" "${APPDIR_ROOT}/${name}.AppImage" 2>/dev/null
 done < <(example_dirs)
-
-echo "  (test binaries — plain, no AppImage)"
-mkdir -p "${APPDIR_ROOT}/tests"
 
 while IFS= read -r dir; do
   name="$(basename "$dir")"
   echo "  tests/${name}"
   GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
-    -o "${APPDIR_ROOT}/tests/${name}" \
+    -o "${X86_STAGE}/tests/${name}" \
     "${dir}"
 done < <(test_dirs)
 
-LINUX_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-x86_64-appimages.tar.gz"
+LINUX_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-x86_64.tar.gz"
 rm -f "${LINUX_TARBALL}"
-(cd "${APPDIR_ROOT}" && tar czf "${LINUX_TARBALL}" *.AppImage tests/)
+(cd "${X86_STAGE}" && tar czf "${LINUX_TARBALL}" .)
 echo "  -> ${LINUX_TARBALL}"
 
 # =============================================================================
@@ -286,12 +243,12 @@ echo "  -> ${ARM64_TARBALL}"
 # =============================================================================
 # Cleanup staging directories
 # =============================================================================
-rm -rf "${WIN_STAGE}" "${MAC_STAGE}" "${APPDIR_ROOT}" "${ARM64_STAGE}"
+rm -rf "${WIN_STAGE}" "${MAC_STAGE}" "${X86_STAGE}" "${ARM64_STAGE}"
 
 echo ""
 echo "Done. Artifacts in ${OUT_DIR}:"
 ls -lh \
   "${OUT_DIR}/goxpyriment-examples-windows-x86_64.zip" \
   "${OUT_DIR}/goxpyriment-examples-macos-arm64.zip" \
-  "${OUT_DIR}/goxpyriment-examples-linux-x86_64-appimages.tar.gz" \
+  "${OUT_DIR}/goxpyriment-examples-linux-x86_64.tar.gz" \
   "${OUT_DIR}/goxpyriment-examples-linux-arm64.tar.gz"

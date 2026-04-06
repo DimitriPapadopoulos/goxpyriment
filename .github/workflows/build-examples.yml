@@ -20,18 +20,6 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Install FUSE (for appimagetool)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfuse2
-
-      - name: Download appimagetool
-        run: |
-          mkdir -p examples/installers/AppImages
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
-            -O examples/installers/appimagetool
-          chmod +x examples/installers/appimagetool
-
       - name: Build all platforms
         run: bash examples/installers/build-all-platforms.sh
 
@@ -47,11 +35,11 @@ jobs:
           name: macos-zip
           path: examples/installers/goxpyriment-examples-macos-arm64.zip
 
-      - name: Upload Linux AppImages artifact
+      - name: Upload Linux x86_64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimages
-          path: examples/installers/goxpyriment-examples-linux-x86_64-appimages.tar.gz
+          name: linux-x86_64
+          path: examples/installers/goxpyriment-examples-linux-x86_64.tar.gz
 
       - name: Upload Linux arm64 artifact
         uses: actions/upload-artifact@v4
@@ -81,7 +69,7 @@ jobs:
           sha256sum \
             goxpyriment-examples-windows-x86_64.zip \
             goxpyriment-examples-macos-arm64.zip \
-            goxpyriment-examples-linux-x86_64-appimages.tar.gz \
+            goxpyriment-examples-linux-x86_64.tar.gz \
             goxpyriment-examples-linux-arm64.tar.gz \
             > SHA256SUMS
 
@@ -93,7 +81,7 @@ jobs:
           files: |
             artifacts/goxpyriment-examples-windows-x86_64.zip
             artifacts/goxpyriment-examples-macos-arm64.zip
-            artifacts/goxpyriment-examples-linux-x86_64-appimages.tar.gz
+            artifacts/goxpyriment-examples-linux-x86_64.tar.gz
             artifacts/goxpyriment-examples-linux-arm64.tar.gz
             artifacts/SHA256SUMS
         env:
