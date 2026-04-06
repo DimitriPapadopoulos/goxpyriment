@@ -3,7 +3,7 @@ module github.com/chrplr/goxpyriment/tests
 go 1.25.7
 
 require (
-	github.com/Zyko0/go-sdl3 v0.1.0
+	github.com/Zyko0/go-sdl3 v0.1.1
 	github.com/chrplr/goxpyriment v0.0.0
 )
 

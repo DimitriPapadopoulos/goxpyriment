@@ -2,8 +2,9 @@
 # Copyright (2026) Christophe Pallier <christophe@pallier.org>
 # Distributed under the GNU General Public License v3.
 
-# Build all goxpyriment examples for Windows, macOS (arm64), and Linux (x86_64).
-# Uses Go cross-compilation (CGO_ENABLED=0 required).
+# Build all goxpyriment examples and tests for Windows, macOS (arm64), Linux
+# (x86_64), and Linux (arm64 / Raspberry Pi). Uses Go cross-compilation
+# (CGO_ENABLED=0 required).
 #
 # Run from the repo root OR from examples/installers/:
 #   bash examples/installers/build-all-platforms.sh
@@ -19,6 +20,7 @@
 #   goxpyriment-examples-windows-x86_64.zip
 #   goxpyriment-examples-macos-arm64.zip
 #   goxpyriment-examples-linux-x86_64-appimages.tar.gz
+#   goxpyriment-examples-linux-arm64.tar.gz          (examples + tests, plain binaries)
 
 set -euo pipefail
 
@@ -26,16 +28,27 @@ export CGO_ENABLED=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLES_DIR="${SCRIPT_DIR%/installers}"
+REPO_ROOT="$(cd "${EXAMPLES_DIR}/.." && pwd)"
+TESTS_DIR="${REPO_ROOT}/tests"
 OUT_DIR="${SCRIPT_DIR}"
 ASSETS_DIR="${EXAMPLES_DIR}/../assets"
 
 SKIP_DIRS=("assets" "installers" "xpd_results")
+SKIP_TEST_DIRS=("psychopy-test")
 
 # --- helpers -----------------------------------------------------------------
 
 is_skipped() {
   local name="$1"
   for s in "${SKIP_DIRS[@]}"; do
+    [[ "$name" == "$s" ]] && return 0
+  done
+  return 1
+}
+
+is_skipped_test() {
+  local name="$1"
+  for s in "${SKIP_TEST_DIRS[@]}"; do
     [[ "$name" == "$s" ]] && return 0
   done
   return 1
@@ -52,6 +65,17 @@ example_dirs() {
   done
 }
 
+# Enumerate test directories that have a main.go
+test_dirs() {
+  for dir in "${TESTS_DIR}"/*/; do
+    local name
+    name="$(basename "$dir")"
+    is_skipped_test "$name" && continue
+    [[ -f "${dir}/main.go" ]] || continue
+    echo "$dir"
+  done
+}
+
 # =============================================================================
 # 1. Windows x86_64 — zip of .exe files
 # =============================================================================
@@ -59,7 +83,7 @@ example_dirs() {
 echo "=== Building Windows x86_64 binaries ==="
 WIN_STAGE="${OUT_DIR}/win-stage"
 rm -rf "${WIN_STAGE}"
-mkdir -p "${WIN_STAGE}"
+mkdir -p "${WIN_STAGE}/tests"
 
 while IFS= read -r dir; do
   name="$(basename "$dir")"
@@ -69,6 +93,15 @@ while IFS= read -r dir; do
     -o "${WIN_STAGE}/${name}.exe" \
     "${dir}"
 done < <(example_dirs)
+
+while IFS= read -r dir; do
+  name="$(basename "$dir")"
+  echo "  tests/${name}.exe"
+  GOOS=windows GOARCH=amd64 go build \
+    -ldflags="-s -w" \
+    -o "${WIN_STAGE}/tests/${name}.exe" \
+    "${dir}"
+done < <(test_dirs)
 
 WIN_ZIP="${OUT_DIR}/goxpyriment-examples-windows-x86_64.zip"
 rm -f "${WIN_ZIP}"
@@ -82,7 +115,7 @@ echo "  -> ${WIN_ZIP}"
 echo "=== Building macOS arm64 .app bundles ==="
 MAC_STAGE="${OUT_DIR}/mac-stage"
 rm -rf "${MAC_STAGE}"
-mkdir -p "${MAC_STAGE}"
+mkdir -p "${MAC_STAGE}/tests"
 
 while IFS= read -r dir; do
   name="$(basename "$dir")"
@@ -127,6 +160,15 @@ EOF
     cp -R "${dir}/assets" "${app}/Contents/Resources/"
   fi
 done < <(example_dirs)
+
+while IFS= read -r dir; do
+  name="$(basename "$dir")"
+  echo "  tests/${name}"
+  GOOS=darwin GOARCH=arm64 go build \
+    -ldflags="-s -w" \
+    -o "${MAC_STAGE}/tests/${name}" \
+    "${dir}"
+done < <(test_dirs)
 
 # Note: codesign is NOT run here — binaries are unsigned.
 # macOS users must right-click → Open, or run:
@@ -192,19 +234,64 @@ EOF
   ARCH=x86_64 "${TOOL}" "${appdir}" "${APPDIR_ROOT}/${name}.AppImage" 2>/dev/null
 done < <(example_dirs)
 
+echo "  (test binaries — plain, no AppImage)"
+mkdir -p "${APPDIR_ROOT}/tests"
+
+while IFS= read -r dir; do
+  name="$(basename "$dir")"
+  echo "  tests/${name}"
+  GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-s -w" \
+    -o "${APPDIR_ROOT}/tests/${name}" \
+    "${dir}"
+done < <(test_dirs)
+
 LINUX_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-x86_64-appimages.tar.gz"
 rm -f "${LINUX_TARBALL}"
-(cd "${APPDIR_ROOT}" && tar czf "${LINUX_TARBALL}" *.AppImage)
+(cd "${APPDIR_ROOT}" && tar czf "${LINUX_TARBALL}" *.AppImage tests/)
 echo "  -> ${LINUX_TARBALL}"
+
+# =============================================================================
+# 4. Linux arm64 (Raspberry Pi) — plain binaries: examples + tests
+# =============================================================================
+
+echo "=== Building Linux arm64 (Raspberry Pi) binaries ==="
+ARM64_STAGE="${OUT_DIR}/arm64-stage"
+rm -rf "${ARM64_STAGE}"
+mkdir -p "${ARM64_STAGE}/tests"
+
+while IFS= read -r dir; do
+  name="$(basename "$dir")"
+  echo "  ${name}"
+  GOOS=linux GOARCH=arm64 go build \
+    -ldflags="-s -w" \
+    -o "${ARM64_STAGE}/${name}" \
+    "${dir}"
+done < <(example_dirs)
+
+while IFS= read -r dir; do
+  name="$(basename "$dir")"
+  echo "  tests/${name}"
+  GOOS=linux GOARCH=arm64 go build \
+    -ldflags="-s -w" \
+    -o "${ARM64_STAGE}/tests/${name}" \
+    "${dir}"
+done < <(test_dirs)
+
+ARM64_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-arm64.tar.gz"
+rm -f "${ARM64_TARBALL}"
+(cd "${ARM64_STAGE}" && tar czf "${ARM64_TARBALL}" .)
+echo "  -> ${ARM64_TARBALL}"
 
 # =============================================================================
 # Cleanup staging directories
 # =============================================================================
-rm -rf "${WIN_STAGE}" "${MAC_STAGE}" "${APPDIR_ROOT}"
+rm -rf "${WIN_STAGE}" "${MAC_STAGE}" "${APPDIR_ROOT}" "${ARM64_STAGE}"
 
 echo ""
 echo "Done. Artifacts in ${OUT_DIR}:"
 ls -lh \
   "${OUT_DIR}/goxpyriment-examples-windows-x86_64.zip" \
   "${OUT_DIR}/goxpyriment-examples-macos-arm64.zip" \
-  "${OUT_DIR}/goxpyriment-examples-linux-x86_64-appimages.tar.gz"
+  "${OUT_DIR}/goxpyriment-examples-linux-x86_64-appimages.tar.gz" \
+  "${OUT_DIR}/goxpyriment-examples-linux-arm64.tar.gz"
