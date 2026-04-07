@@ -2,14 +2,17 @@
 # Generate PDF versions of the documentation using pandoc + xelatex.
 # Run this before "mkdocs gh-deploy" to include PDFs on the GitHub Pages site.
 #
-# Requirements: pandoc, xelatex (texlive-xetex)
-#   Ubuntu/Debian: sudo apt install pandoc texlive-xetex
+# Requirements: pandoc, xelatex, DejaVu fonts
+#   Ubuntu/Debian: sudo apt install pandoc texlive-xetex fonts-dejavu
 #   macOS:         brew install pandoc && brew install --cask mactex
+#                  (DejaVu fonts are included with MacTeX)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# DejaVu fonts have broad Unicode coverage (Greek, math operators, check mark).
+# unicode-fixes.tex is a safety net for any remaining missing characters.
 PANDOC_OPTS=(
   --pdf-engine=xelatex
   --toc
@@ -21,6 +24,9 @@ PANDOC_OPTS=(
   -V toccolor=black
   --highlight-style=tango
   -V fontsize=11pt
+  -V mainfont="DejaVu Serif"
+  -V monofont="DejaVu Sans Mono"
+  --include-in-header=unicode-fixes.tex
 )
 
 cd "$SCRIPT_DIR"

@@ -22,7 +22,7 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 | Document | | PDF |
 |---|---|---|
-| [Overall Presentation](../paper/goxpyriment-paper.pdf) | Short paper describing the project | [↓](../paper/goxpyriment-paper.pdf) |
+| [Overall Presentation](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment-paper.pdf) | Short paper describing the project | [↓](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment-paper.pdf) |
 | [Getting Started](GettingStarted.md) | Tutorials | [↓](GettingStarted.pdf) |
 | [Gallery of Examples](GalleryOfExamples.md) | Ready-to-run experiments and demos | |
 | [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |

@@ -37,8 +37,9 @@ nav:
   - Getting Started: GettingStarted.md
   - User Manual: UserManual.md
   - API Reference: API.md
-  - SDL Usage Notes: library_usage.md
   - Gallery of Examples: GalleryOfExamples.md
+  - Installation: Installation.md
+  - Timing Tests: TimingTests.md
 
 markdown_extensions:
   - admonition

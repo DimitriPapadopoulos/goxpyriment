@@ -52,7 +52,7 @@ Tier 1 — display    what is my true refresh rate and frame-interval stability?
          vrr        can I present stimuli for arbitrary durations (not just multiples of the frame period)?
 Tier 2 — trigger    how precise is my DLP-IO8-G trigger device?
 Tier 3 — frames     does the photodiode confirm what the software reports?
-         flash      can I present a single-frame stimulus reliably?
+                    (frames-on=1 tests single-frame / minimum-duration capability)
          tones      is my audio onset timing stable over a long session?
          av         what is the actual audio–visual delay?
 Tier 4 — rt         how precise is my reaction-time measurement?
@@ -138,7 +138,7 @@ records the wall-clock interval between consecutive `RenderPresent` calls
 **What to look for:**
 
 ```
-Estimated refresh rate: 59.940 Hz  (use -hz 59.94 for frames/flash targets)
+Estimated refresh rate: 59.940 Hz  (use -hz 59.94 for stream targets)
 ── Frame intervals ──────────────────────────────────────────────────────
   n       : 1796
   target  : 16.683 ms  (measured mean)
@@ -210,7 +210,7 @@ latency by:
 ### `stream` — RSVP sequential-stimulus timing
 
 ```bash
-Timing-Tests -test stream -cycles 120 -frames-per-phase 3 -isi-frames 3 
+Timing-Tests -test stream -cycles 120 -frames-on 3 -frames-off 3 
 ```
 
 Many paradigms in cognitive psychology use *rapid serial visual presentation*
@@ -220,12 +220,12 @@ are timed correctly; the `stream` test tells you whether a *sequence* of
 stimuli presented in a trial loop is timed correctly.
 
 The test presents `-cycles` elements. Each element is a bright rectangle
-(`-frames-per-phase` frames at luminance `-level-b`) followed by a dark
-inter-stimulus interval (`-isi-frames` frames at luminance `-level-a`).
+(`-frames-on` frames at luminance `-level-b`) followed by a dark
+inter-stimulus interval (`-frames-off` frames at luminance `-level-a`).
 The target stimulus onset asynchrony (SOA) is:
 
 ```
-SOA = (frames-per-phase + isi-frames) × frame_duration
+SOA = (frames-on + frames-off) × frame_duration
 ```
 
 For 3 on + 3 off frames at 60 Hz this is 6 × 16.67 ms = 100 ms.
@@ -420,7 +420,7 @@ round-trip latency — the time between writing the byte and the pin actually
 changing state — is determined by the USB host controller's polling interval
 (nominally 1 ms on full-speed USB).
 
-Before trusting trigger pulses in `frames`, `flash`, `tones`, `av`, or `rt`,
+Before trusting trigger pulses in `frames`, `tones`, `av`, or `rt`,
 use this test to characterise how precise your DLP-IO8-G is in isolation.
 The test drives a square wave on pin `-trigger-pin` for `-duration-s` seconds
 and records the jitter of each rising and falling edge against the ideal
@@ -453,50 +453,48 @@ The tests in this tier require a photodiode taped to your screen
 and an oscilloscope. They answer the question:
 *does the monitor actually show what the software reports?*
 
-### `frames` — visual onset vs. trigger alignment
+### `frames` — visual onset and phase duration (alias: `flash`)
 
 ```bash
-Timing-Tests -test frames -frames-per-phase 2 -cycles 120 -hz 59.94
+# Multi-frame alternation (e.g. 2 bright + 2 dark at 60 Hz → 33.3 ms phases):
+Timing-Tests -test frames -frames-on 2 -frames-off 2 -cycles 120
+
+# Single-frame flashes (minimum-duration test, formerly "flash"):
+Timing-Tests -test frames -frames-on 1 -frames-off 60 -cycles 60
 ```
 
-This test alternates between a dark screen (luminance `-level-a`) and a bright
-screen (luminance `-level-b`). Each phase lasts `-frames-per-phase` frames.
-At the start of every bright phase a trigger pulse is sent on the DLP-IO8-G.
+This test alternates between a bright phase (`-frames-on` frames at luminance
+`-level-b`) and a dark phase (`-frames-off` frames at luminance `-level-a`).
+A trigger pulse is sent at the onset of every bright phase.
+
+Durations are specified in **frames**, not milliseconds, so no `-hz` estimate
+is needed. The measured mean is used as the reference for deviation statistics.
+
+**Two measurements are reported per run:**
+
+- **Bright-phase duration** — time from the first bright flip to the first dark
+  flip. Should equal `frames-on × frame_interval`. This is what a photodiode
+  measures as pulse width.
+- **Period** — time from one bright onset to the next. Should equal
+  `(frames-on + frames-off) × frame_interval`.
 
 **On the oscilloscope:**
-- Channel 1 (photodiode): shows a square wave whose period equals
-  `2 × frames-per-phase × frame_duration`.
-- Channel 2 (trigger): should align closely with the *rising edge* of the
-  photodiode signal.
-- The gap between the trigger rising edge and the photodiode rising edge is
-  the **display input lag** — the time from when the software executes the
-  flip to when the first photon leaves the screen. This is typically one to
-  two frames on LCD monitors with "gaming" mode disabled.
+- Channel 1 (photodiode): square wave. Rising-edge width = bright-phase
+  duration; full period = frames-on + frames-off frame intervals.
+- Channel 2 (trigger): should align with the rising edge of the photodiode.
+  The gap between them is the **display input lag** — time from software flip
+  to first photon. Typically one to two frames on LCD monitors without "gaming"
+  mode.
 
-**From the CSV alone** (without an oscilloscope): you can verify that the
-software-reported flip intervals match the expected frame duration and check
-for dropped frames.
+**Single-frame capability** (`-frames-on 1`): the photodiode pulse width should
+equal one frame duration (~16.67 ms at 60 Hz). A pulse that is two frames wide
+(~33 ms) indicates triple-buffering or compositor interference; single-frame
+stimuli are then not achievable without driver changes.
 
-**Output file:** `cycle, phase, frame, t_before_ms, t_after_ms, interval_ms, trigger`.
+**From the CSV alone** (no oscilloscope): check that `bright_duration_ms` and
+`period_ms` match the expected frame multiples and that their SD is low.
 
----
-
-### `flash` — single-frame precision
-
-```bash
-Timing-Tests -test flash -isi-frames 60 -cycles 60 -hz 59.94
-```
-
-This test verifies that your system can present a stimulus that lasts exactly
-*one frame*. It presents a single bright frame every `-isi-frames` dark frames.
-
-**On the oscilloscope:** the photodiode pulse width should equal one frame
-duration (~16.67 ms at 60 Hz). If you see a pulse that is two frames wide
-(~33 ms), your graphics driver is presenting the stimulus for two frames
-instead of one — possibly due to triple-buffering or compositor activity.
-Single-frame stimuli are impossible on that system without driver changes.
-
-**Output file:** `flash_num, t_before_ms, t_after_ms, interval_ms`.
+**Output file:** `cycle, t_before_ms, t_after_ms, bright_duration_ms, period_ms`.
 
 ---
 

@@ -24,7 +24,7 @@
 // Tier 3 — stimulus timing validation (photodiode + oscilloscope):
 //
 //	frames  Alternating luminance: visual onset vs. trigger alignment
-//	flash   Single-frame white flashes: minimum stimulus duration
+//	        (alias: flash — single-frame capability is the special case frames-on=1)
 //	tones   Regular tone stream: audio onset jitter over time  (alias: sound)
 //	av      Audio–visual synchrony with controllable SOA
 //
@@ -52,16 +52,13 @@
 //
 //	-iti-ms float     Mean inter-trial interval ms (jittered ±50 %; default 1000)
 //
-// Per-test flags — frames / flash:
+// Per-test flags — frames (alias: flash):
 //
 //	-level-a int      Dark luminance 0–255 (default 0)
 //	-level-b int      Bright luminance 0–255 (default 255)
-//	-frames-per-phase int  Frames at each luminance (default 2)   [frames]
-//	-isi-frames int   Frames between flashes (default 60)         [flash]
-//	-hz float         Expected display refresh rate in Hz (default 60); run
-//	                  -test jitter first to measure the true value, then pass
-//	                  it here so that frame-interval targets are exact
-//	-warmup int       Frames discarded from statistics at start (default 10)
+//	-frames-on  int   Bright frames per cycle (default 1)
+//	-frames-off int   Dark frames per cycle (default 60)
+//	-warmup int       Cycles discarded from statistics at start (default 10)
 //
 // Per-test flags — av:
 //
@@ -116,15 +113,15 @@ import (
 // ── Flags ─────────────────────────────────────────────────────────────────────
 
 var (
-	fTest           = flag.String("test", "", "Sub-test: check | display | latency | stream | vrr | trigger | frames | flash | tones | av | rt\n\t(legacy aliases: jitter=display  drain=latency  square=trigger  sound=tones  audio=check)")
-	fPort           = flag.String("port", "", "Serial port for DLP-IO8-G (empty = auto-detect)")
-	fTriggerPin     = flag.Int("trigger-pin", 1, "DLP-IO8-G output pin (1–8)")
-	fTriggerMs      = flag.Int("trigger-ms", 5, "Trigger pulse duration (ms)")
-	fCycles         = flag.Int("cycles", 60, "Number of cycles / flashes")
-	fLevelA         = flag.Int("level-a", 0, "Dark luminance 0–255")
-	fLevelB         = flag.Int("level-b", 255, "Bright luminance 0–255")
-	fFramesPerPhase = flag.Int("frames-per-phase", 2, "Frames at each luminance [frames test]")
-	fIsiFrames      = flag.Int("isi-frames", 60, "Frames between flashes [flash test]")
+	fTest       = flag.String("test", "", "Sub-test: check | display | latency | stream | vrr | trigger | frames | tones | av | rt\n\t(legacy aliases: jitter=display  drain=latency  square=trigger  sound=tones  audio=check  flash=frames)")
+	fPort       = flag.String("port", "", "Serial port for DLP-IO8-G (empty = auto-detect)")
+	fTriggerPin = flag.Int("trigger-pin", 1, "DLP-IO8-G output pin (1–8)")
+	fTriggerMs  = flag.Int("trigger-ms", 5, "Trigger pulse duration (ms)")
+	fCycles     = flag.Int("cycles", 60, "Number of cycles / flashes")
+	fLevelA     = flag.Int("level-a", 0, "Dark luminance 0–255")
+	fLevelB     = flag.Int("level-b", 255, "Bright luminance 0–255")
+	fFramesOn   = flag.Int("frames-on", 1, "Bright frames per cycle [frames / stream tests]")
+	fFramesOff  = flag.Int("frames-off", 60, "Dark frames per cycle [frames / stream tests]")
 	fSoaMs          = flag.Float64("soa-ms", 0, "Visual-to-audio SOA ms; negative = audio first [av test]")
 	fItiMs          = flag.Float64("iti-ms", 1000, "Inter-trial interval ms [av test]")
 	fFreqHz         = flag.Float64("freq-hz", 1000, "Tone frequency Hz [av test]")
@@ -133,7 +130,7 @@ var (
 	fPeriodMs       = flag.Float64("period-ms", 100, "Square-wave period ms [square test]")
 	fDuty           = flag.Float64("duty", 50, "Duty cycle 0–100 %% [square test]")
 	fAudioFrames    = flag.Int("audio-frames", 0, "Audio hardware buffer size in sample frames (0=SDL default). Must be set before SDL audio opens; e.g. 256, 512, 1024.")
-	fHz             = flag.Float64("hz", 60.0, "Expected display refresh rate in Hz; used to compute frame-interval targets [frames / flash]")
+	fHz             = flag.Float64("hz", 60.0, "Expected display refresh rate in Hz; used to compute frame-interval targets [stream / display]")
 	fWarmup         = flag.Int("warmup", 10, "Frames to discard at the start of visual tests before recording statistics")
 	fDrainReps      = flag.Int("drain-reps", 10, "Repetitions per tone duration [drain test]")
 	fVRRMaxMs       = flag.Int("vrr-max-ms", 50, "Maximum stimulus duration to sweep in VRR test (ms, in 1 ms steps) [vrr test]")
@@ -298,137 +295,114 @@ func setupTrigger() (triggers.OutputTTLDevice, string) {
 	return trig, portName
 }
 
-// ── Test: frames ───────────────────────────────────────────────────────────────
+// ── Test: frames (alias: flash) ────────────────────────────────────────────────
 
-// runFrames alternates between two luminance levels for *fCycles complete cycles.
-// A trigger pulse is sent on each transition to the bright phase.
+// runFrames alternates between a bright phase (*fFramesOn frames at level-b) and
+// a dark phase (*fFramesOff frames at level-a) for *fCycles complete cycles.
+// A trigger pulse is sent at the onset of each bright phase.
+//
+// Two statistics are reported from software-side timestamps:
+//   - Bright-phase duration: time from the first bright flip to the first dark
+//     flip. Should equal frames-on × frame_interval.
+//   - Period: time from one bright onset to the next.
+//     Should equal (frames-on + frames-off) × frame_interval.
+//
+// No -hz flag is needed: frame counts are the authoritative unit and the
+// measured mean is used as the deviation reference in statistics.
 func runFrames(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
-	targetFrameMs := 1000.0 / *fHz
-	targetMs := float64(*fFramesPerPhase) * targetFrameMs
-	fmt.Printf("frames: level-a=%d level-b=%d frames-per-phase=%d cycles=%d hz=%.2f warmup=%d\n",
-		*fLevelA, *fLevelB, *fFramesPerPhase, *fCycles, *fHz, *fWarmup)
+	framesOn := *fFramesOn
+	framesOff := *fFramesOff
 
-	exp.Data.WriteComment(fmt.Sprintf("test=frames level-a=%d level-b=%d frames-per-phase=%d cycles=%d hz=%.2f warmup=%d",
-		*fLevelA, *fLevelB, *fFramesPerPhase, *fCycles, *fHz, *fWarmup))
+	fmt.Printf("frames: level-a=%d level-b=%d frames-on=%d frames-off=%d cycles=%d warmup=%d\n",
+		*fLevelA, *fLevelB, framesOn, framesOff, *fCycles, *fWarmup)
+
+	exp.Data.WriteComment(fmt.Sprintf("test=frames level-a=%d level-b=%d frames-on=%d frames-off=%d cycles=%d warmup=%d",
+		*fLevelA, *fLevelB, framesOn, framesOff, *fCycles, *fWarmup))
 	exp.AddDataVariableNames([]string{
-		"cycle", "phase", "frame",
-		"t_before_ms", "t_after_ms", "interval_ms", "trigger",
+		"cycle", "t_before_ms", "t_after_ms", "bright_duration_ms", "period_ms",
 	})
 
-	var intervals []float64
-	var prevT float64
-	frame := 0
-	// warmupIntervals counts frame-to-frame transitions to skip; each transition
-	// spans one frame, so we need warmup * 2 (dark+bright) * fFramesPerPhase ticks.
-	warmupTicks := *fWarmup * 2 * *fFramesPerPhase
+	var brightDurations []float64
+	var periods []float64
+	var prevBrightStartT float64
 
 	return exp.Run(func() error {
 		oldGC := debug.SetGCPercent(-1)
 		defer debug.SetGCPercent(oldGC)
 
 		for cycle := 0; cycle < *fCycles; cycle++ {
-			for phase := 0; phase < 2; phase++ {
-				level := byte(*fLevelA)
-				isBright := phase == 1
-				if isBright {
-					level = byte(*fLevelB)
+			// ── Bright phase ──────────────────────────────────────────────────
+			var tBrightBefore, tBrightStart float64
+			for f := 0; f < framesOn; f++ {
+				if f == 0 {
+					// Send trigger just before the flip so it precedes the onset.
+					_ = trig.SetHigh(*fTriggerPin)
 				}
-				for f := 0; f < *fFramesPerPhase; f++ {
-					triggered := false
-					if isBright && f == 0 {
-						// Send trigger just before the flip so it precedes the onset.
-						_ = trig.SetHigh(*fTriggerPin)
-						triggered = true
-					}
-
-					tB, tA := fillGray(exp, level)
-
-					if triggered {
-						go func() {
-							time.Sleep(time.Duration(*fTriggerMs) * time.Millisecond)
-							_ = trig.SetLow(*fTriggerPin)
-						}()
-					}
-
-					var intervalMs float64
-					if prevT > 0 {
-						intervalMs = tA - prevT
-						if frame >= warmupTicks {
-							intervals = append(intervals, intervalMs)
-						}
-					}
-					prevT = tA
-
-					exp.Data.Add(cycle, phase, frame, fmt.Sprintf("%.3f", tB), fmt.Sprintf("%.3f", tA), fmt.Sprintf("%.3f", intervalMs), triggered)
-					frame++
-
-					// Check for ESC / quit.
-					state := exp.PollEvents(nil)
-					if state.QuitRequested {
-						return control.EndLoop
-					}
+				tB, tA := fillGray(exp, byte(*fLevelB))
+				if f == 0 {
+					tBrightBefore, tBrightStart = tB, tA
+					go func() {
+						time.Sleep(time.Duration(*fTriggerMs) * time.Millisecond)
+						_ = trig.SetLow(*fTriggerPin)
+					}()
 				}
-			}
-		}
-		printStats("Frame intervals", computeStats(intervals, targetMs), targetMs)
-		return control.EndLoop
-	})
-}
-
-// ── Test: flash ────────────────────────────────────────────────────────────────
-
-// runFlash presents a single bright frame every *fIsiFrames dark frames.
-func runFlash(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
-	expectedMs := float64(*fIsiFrames+1) * 1000.0 / *fHz
-	fmt.Printf("flash: level-a=%d level-b=%d isi-frames=%d cycles=%d hz=%.2f warmup=%d\n",
-		*fLevelA, *fLevelB, *fIsiFrames, *fCycles, *fHz, *fWarmup)
-
-	exp.Data.WriteComment(fmt.Sprintf("test=flash level-a=%d level-b=%d isi-frames=%d cycles=%d hz=%.2f warmup=%d",
-		*fLevelA, *fLevelB, *fIsiFrames, *fCycles, *fHz, *fWarmup))
-	exp.AddDataVariableNames([]string{
-		"flash_num", "t_before_ms", "t_after_ms", "interval_ms",
-	})
-
-	var flashIntervals []float64
-	var prevFlashT float64
-
-	return exp.Run(func() error {
-		oldGC := debug.SetGCPercent(-1)
-		defer debug.SetGCPercent(oldGC)
-
-		for flash := 0; flash < *fCycles; flash++ {
-			// ISI: dark frames
-			for f := 0; f < *fIsiFrames; f++ {
-				fillGray(exp, byte(*fLevelA))
 				state := exp.PollEvents(nil)
 				if state.QuitRequested {
 					return control.EndLoop
 				}
 			}
 
-			// Single bright frame + trigger
-			_ = trig.SetHigh(*fTriggerPin)
-			tB, tA := fillGray(exp, byte(*fLevelB))
-			go func() {
-				time.Sleep(time.Duration(*fTriggerMs) * time.Millisecond)
-				_ = trig.SetLow(*fTriggerPin)
-			}()
-
-			var intervalMs float64
-			if prevFlashT > 0 {
-				intervalMs = tA - prevFlashT
-				if flash >= *fWarmup {
-					flashIntervals = append(flashIntervals, intervalMs)
+			// ── Dark phase ────────────────────────────────────────────────────
+			var tDarkStart float64
+			for f := 0; f < framesOff; f++ {
+				_, tA := fillGray(exp, byte(*fLevelA))
+				if f == 0 {
+					tDarkStart = tA
+				}
+				state := exp.PollEvents(nil)
+				if state.QuitRequested {
+					return control.EndLoop
 				}
 			}
-			prevFlashT = tA
-			exp.Data.Add(flash, fmt.Sprintf("%.3f", tB), fmt.Sprintf("%.3f", tA), fmt.Sprintf("%.3f", intervalMs))
+
+			// ── Record measurements ───────────────────────────────────────────
+			// bright_duration_ms = first dark flip − first bright flip = frames-on frame intervals
+			// period_ms          = this bright onset − previous bright onset = (on+off) frame intervals
+			brightDurMs := tDarkStart - tBrightStart
+			var periodMs float64
+			if prevBrightStartT > 0 {
+				periodMs = tBrightStart - prevBrightStartT
+			}
+
+			if cycle >= *fWarmup {
+				brightDurations = append(brightDurations, brightDurMs)
+				if periodMs > 0 {
+					periods = append(periods, periodMs)
+				}
+			}
+
+			exp.Data.Add(cycle,
+				fmt.Sprintf("%.3f", tBrightBefore),
+				fmt.Sprintf("%.3f", tBrightStart),
+				fmt.Sprintf("%.3f", brightDurMs),
+				fmt.Sprintf("%.3f", periodMs))
+
+			prevBrightStartT = tBrightStart
 		}
 
-		printStats("Flash intervals", computeStats(flashIntervals, expectedMs), expectedMs)
+		// Use measured mean as deviation reference — no -hz needed.
+		sDur := computeStats(brightDurations, 0)
+		sDur = computeStats(brightDurations, sDur.mean)
+		printStats(fmt.Sprintf("Bright-phase duration (frames-on=%d)", framesOn), sDur, sDur.mean)
+
+		sPer := computeStats(periods, 0)
+		sPer = computeStats(periods, sPer.mean)
+		printStats(fmt.Sprintf("Period (frames-on=%d + frames-off=%d)", framesOn, framesOff), sPer, sPer.mean)
+
 		return control.EndLoop
 	})
 }
+
 
 // ── Test: av ──────────────────────────────────────────────────────────────────
 
@@ -931,8 +905,8 @@ func runCheck(exp *control.Experiment) error {
 // presentations — the kind of trial loop a psychologist would actually run in
 // a rapid serial visual presentation paradigm.
 //
-// *fCycles elements are presented. Each element consists of *fFramesPerPhase
-// bright frames (luminance *fLevelB) followed by *fIsiFrames dark frames
+// *fCycles elements are presented. Each element consists of *fFramesOn
+// bright frames (luminance *fLevelB) followed by *fFramesOff dark frames
 // (luminance *fLevelA). If a DLP-IO8-G is connected, a trigger pulse is fired
 // on *fTriggerPin at the onset of every bright phase so that the software
 // timestamps can be validated against a photodiode on the oscilloscope.
@@ -949,8 +923,8 @@ func runCheck(exp *control.Experiment) error {
 // The first *fWarmup elements are excluded from statistics (GPU pipeline warm-up).
 func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 	n := *fCycles
-	onFrames := *fFramesPerPhase
-	offFrames := *fIsiFrames
+	onFrames := *fFramesOn
+	offFrames := *fFramesOff
 	targetFrameMs := 1000.0 / *fHz
 	targetOnMs := float64(onFrames) * targetFrameMs
 	targetOffMs := float64(offFrames) * targetFrameMs
@@ -967,7 +941,7 @@ func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 	fmt.Println()
 
 	exp.Data.WriteComment(fmt.Sprintf(
-		"test=stream cycles=%d frames-per-phase=%d isi-frames=%d hz=%.2f warmup=%d level-a=%d level-b=%d",
+		"test=stream cycles=%d frames-on=%d frames-off=%d hz=%.2f warmup=%d level-a=%d level-b=%d",
 		n, onFrames, offFrames, *fHz, *fWarmup, *fLevelA, *fLevelB))
 	exp.AddDataVariableNames([]string{
 		"element",
@@ -1408,10 +1382,8 @@ func main() {
 	case "trigger", "square": // "square" is the legacy name
 		runErr = runSquare(exp, trig)
 	// ── Tier 3: stimulus timing validation ───────────────────────────────────
-	case "frames":
+	case "frames", "flash": // "flash" is the legacy name (frames-on=1 frames-off=N)
 		runErr = runFrames(exp, trig)
-	case "flash":
-		runErr = runFlash(exp, trig)
 	case "tones", "sound": // "sound" is the legacy name
 		runErr = runSound(exp, trig)
 	case "av":

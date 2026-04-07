@@ -19,16 +19,16 @@ examples see **[docs/TimingTests.md](../../docs/TimingTests.md)**.
 4. stream   — verify RSVP / sequential-stimulus timing
 5. vrr      — Variable Refresh Rate sweep: 1–N ms in 1 ms steps
 6. trigger  — characterise DLP-IO8-G (if available)
-7. frames   — validate visual onset with photodiode
-8. flash    — verify single-frame capability with photodiode
-9. tones    — measure audio onset jitter (long stream)
-10. av      — measure audio–visual synchrony
-11. rt      — measure reaction-time timestamp precision
+7. frames   — validate visual onset and phase duration with photodiode
+              (use frames-on=1 for single-frame / minimum-duration testing)
+8. tones    — measure audio onset jitter (long stream)
+9. av       — measure audio–visual synchrony
+10. rt      — measure reaction-time timestamp precision
 ```
 
 Steps 1–5 require no external hardware (step 5 benefits from a VRR monitor).
-Steps 6–10 require a DLP-IO8-G and/or oscilloscope + photodiode (see docs).
-Step 11 requires a keyboard or USB response box.
+Steps 6–9 require a DLP-IO8-G and/or oscilloscope + photodiode (see docs).
+Step 10 requires a keyboard or USB response box.
 
 ---
 
@@ -42,11 +42,11 @@ go run tests/Timing-Tests/main.go -test <name> [flags]
 go run tests/Timing-Tests/main.go -test check  
 go run tests/Timing-Tests/main.go -test display -duration-s 30 
 go run tests/Timing-Tests/main.go -test latency 
-go run tests/Timing-Tests/main.go -test stream  -cycles 120 -frames-per-phase 3 -isi-frames 3 
+go run tests/Timing-Tests/main.go -test stream  -cycles 120 -frames-on 3 -frames-off 3 
 go run tests/Timing-Tests/main.go -test vrr     -vrr-max-ms 50 -cycles 5 
 go run tests/Timing-Tests/main.go -test trigger -period-ms 100 -duty 50 -duration-s 30
-go run tests/Timing-Tests/main.go -test frames  -frames-per-phase 2 -cycles 120
-go run tests/Timing-Tests/main.go -test flash   -isi-frames 60 -cycles 60
+go run tests/Timing-Tests/main.go -test frames  -frames-on 2 -frames-off 2 -cycles 120
+go run tests/Timing-Tests/main.go -test frames  -frames-on 1 -frames-off 60 -cycles 60   # single-frame flashes
 go run tests/Timing-Tests/main.go -test tones   -cycles 300 -freq-hz 1000 -tone-ms 50 -iti-ms 450 
 go run tests/Timing-Tests/main.go -test av      -soa-ms 0 -cycles 30 
 go run tests/Timing-Tests/main.go -test rt      -cycles 60 
@@ -69,7 +69,6 @@ Legacy names (`jitter`, `drain`, `square`, `sound`, `audio`) still work as alias
 | `vrr`     | ✓ | optional | optional | optional | — |
 | `trigger` | ✓ | — | recommended | **required** | — |
 | `frames`  | ✓ | **required** | recommended | optional | — |
-| `flash`   | ✓ | **required** | recommended | optional | — |
 | `tones`   | ✓ | — | recommended | optional | — |
 | `av`      | ✓ | **required** | **required** | optional | — |
 | `rt`      | ✓ | optional | optional | optional | **required** |
@@ -89,18 +88,18 @@ Legacy names (`jitter`, `drain`, `square`, `sound`, `audio`) still work as alias
 | `-trigger-pin` | 1 | DLP-IO8-G output pin (1–8) |
 | `-trigger-ms` | 5 | Trigger pulse duration (ms) |
 | `-cycles` | 60 | Number of elements / flashes / trials |
-| `-hz` | 60.0 | Expected refresh rate (Hz); run `display` first to measure the true value |
-| `armup` | 10 | Elements excluded from statistics at start |
+| `-hz` | 60.0 | Expected refresh rate (Hz); used by `display` and `stream` (not needed for `frames`) |
+| `-warmup` | 10 | Cycles/elements excluded from statistics at start |
 | `-audio-frames` | SDL default | Hardware audio buffer size in sample frames (e.g. 256, 512, 2048) |
 
 ### Per-test flags
 
 | Flag | Applies to | Default | Description |
 |------|-----------|---------|-------------|
-| `-level-a` | display, frames, flash, stream | 0 | Dark luminance 0–255 |
-| `-level-b` | display, frames, flash, stream | 255 | Bright luminance 0–255 |
-| `-frames-per-phase` | frames, stream | 2 | Bright frames per element |
-| `-isi-frames` | flash, stream | 60 | Dark frames per ISI |
+| `-level-a` | frames, stream | 0 | Dark luminance 0–255 |
+| `-level-b` | frames, stream | 255 | Bright luminance 0–255 |
+| `-frames-on` | frames, stream | 1 | Bright frames per cycle |
+| `-frames-off` | frames, stream | 60 | Dark frames per cycle |
 | `-duration-s` | display, trigger | 10 | Measurement duration (s) |
 | `-period-ms` | trigger | 100 | Squareave period (ms) |
 | `-duty` | trigger | 50 | Duty cycle (%) |

@@ -1,0 +1,11 @@
+% Remap Unicode characters that are missing from Latin Modern fonts.
+% Used as --include-in-header by docs/make_pdfs.sh.
+% This is a safety net; the primary fix is switching to DejaVu fonts (see
+% make_pdfs.sh) which cover most of these natively.
+\usepackage{newunicodechar}
+\usepackage{amssymb}          % \checkmark, \geq, \approx fallbacks
+
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{γ}{\ensuremath{\gamma}}
+\newunicodechar{✓}{\checkmark}
