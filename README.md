@@ -11,6 +11,8 @@
 
 If you are looking for a simpler, *no-code experiment generator*, check out [Gostim2](https://chrplr.github.io/gostim2/).
 
+> [WARNING!] This software is in beta-testing. 
+
 ---
 
 ## Why goxpyriment?
