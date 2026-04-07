@@ -22,6 +22,7 @@ package apparatus
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -161,6 +162,16 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 			}
 		}
 
+		// On Linux, prefer Vulkan over OpenGL. With NVIDIA proprietary drivers
+		// on X11, the OpenGL renderer can silently render to a non-visible
+		// framebuffer in fullscreen mode (blank screen or SIGSEGV in Present).
+		// Vulkan + WSI handles fullscreen presentation correctly on all Linux
+		// GPU vendors. SetHint has normal priority so SDL_RENDER_DRIVER in the
+		// environment still overrides this (e.g. SDL_RENDER_DRIVER=software).
+		if runtime.GOOS == "linux" {
+			_ = sdl.SetHint(sdl.HINT_RENDER_DRIVER, "vulkan")
+		}
+
 		renderer, err := window.CreateRenderer("")
 		if err != nil {
 			window.Destroy()
@@ -199,14 +210,15 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 
 		logicalSize := &sdl.FPoint{X: float32(logW), Y: float32(logH)}
 
-		// On KMS/DRM, SDL_RenderPresent submits an async drmModePageFlip whose
-		// completion event is only processed by SDL_PumpEvents. Without pumping
-		// events first, the first user-drawn frame sits in the pending-flip queue
-		// and the display continues to show the text console until the event loop
-		// runs (e.g. on the first keypress). Three blank-frame warm-up cycles are
-		// enough to flush the flip pipeline and make the display switch to
-		// graphics mode before any experiment content is drawn.
-		for i := 0; i < 3; i++ {
+		// Warm-up: present several blank frames to flush driver state before
+		// any experiment content is drawn.
+		//   - KMS/DRM: SDL_RenderPresent submits an async drmModePageFlip;
+		//     PumpEvents is required to process the completion event and switch
+		//     the display from the text console to graphics mode.
+		//   - Vulkan/OpenGL on X11: the first few presents may be discarded
+		//     while the compositor or driver initialises the swap chain.
+		// 10 frames is conservative but still imperceptible (<200 ms at 60 Hz).
+		for i := 0; i < 10; i++ {
 			_ = renderer.SetDrawColor(bgColor.R, bgColor.G, bgColor.B, bgColor.A)
 			_ = renderer.Clear()
 			_ = renderer.Present()

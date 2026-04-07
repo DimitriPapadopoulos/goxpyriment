@@ -57,6 +57,31 @@ go build ./...
 
 Most examples accept `-w` for windowed mode (1024×768 window), `-d N` for display selection (monitor index, -1 = primary), and `-s <id>` for subject ID.
 
+### SDL3 runtime requirement
+
+`go-sdl3` uses `purego` to load `libSDL3.so.0` at runtime via `dlopen`. SDL3 is **not** bundled in the Go binary — it must be installed on the target machine:
+
+```bash
+# Ubuntu 24.04+
+sudo apt install libsdl3-0
+
+# Fedora / RHEL
+sudo dnf install SDL3
+```
+
+Pre-built binaries (from GitHub releases) bundle `libSDL3.so.0` in a `lib/` subdirectory and include a `run.sh` wrapper that sets `LD_LIBRARY_PATH` automatically. Use `./run.sh <binary> [flags]` instead of running the binary directly.
+
+### NVIDIA + X11 — fullscreen rendering
+
+On Linux with NVIDIA proprietary drivers and X11, the OpenGL renderer can silently fail in fullscreen mode (blank screen or SIGSEGV in `SDL_RenderPresent`). Windowed mode (`-w`) is unaffected. `apparatus/screen.go` now hints SDL to prefer the Vulkan renderer on Linux, which resolves this with NVIDIA RTX hardware. If Vulkan is unavailable, SDL falls back to OpenGL.
+
+Manual override if needed:
+```bash
+SDL_RENDER_DRIVER=vulkan ./my_experiment      # force Vulkan
+SDL_RENDER_DRIVER=software ./my_experiment    # force software (always works)
+./my_experiment -w                            # windowed mode (avoids fullscreen path)
+```
+
 ### Raspberry Pi — fullscreen rendering workaround
 
 On Raspberry Pi (tested: Ubuntu 25.10 + GNOME/Wayland), fullscreen mode renders nothing (gray screen) while windowed mode works correctly. The SDL3 exclusive-fullscreen path does not properly attach the renderer to the visible framebuffer under the Pi's V3D/KMS stack. Workaround: force the software render driver and Wayland video driver:
