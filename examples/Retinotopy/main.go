@@ -490,7 +490,16 @@ func (r *Retinotopy) updateCombinedTexture(patternID, maskID int) {
 }
 
 func main() {
-	cliRunID := flag.Int("r", 1, "default Run ID (1-6) shown in the UI")
+	cliRunID := flag.Int("r", 1, "Run ID (1-6) pre-selected in the UI")
+	cliSubjectID := flag.String("s", "", "subject ID (pre-fills the UI field)")
+	cliAge := flag.String("age", "", "participant age (pre-fills the UI field)")
+	cliGender := flag.String("gender", "", "participant gender, e.g. M / F / NB (pre-fills the UI field)")
+	cliHandedness := flag.String("handedness", "R", "participant handedness: R or L (pre-fills the UI field)")
+	cliScreenWidth := flag.Float64("screen-width", 30, "screen width in cm (pre-fills the UI field)")
+	cliViewingDistance := flag.Float64("viewing-distance", 50, "viewing distance in cm (pre-fills the UI field)")
+	cliRefreshRate := flag.Float64("refresh-rate", 60, "display refresh rate in Hz (pre-fills the UI field)")
+	cliFullscreen := flag.Bool("fullscreen", true, "start in fullscreen mode (pre-fills the UI field)")
+	cliDisplay := flag.String("display", "0", "display ID, 0 = primary monitor (pre-fills the UI field)")
 	flag.Parse()
 
 	runLabels := []string{"RETBAR1", "RETBAR2", "RETCCW", "RETCW", "RETEXP", "RETCON"}
@@ -500,16 +509,20 @@ func main() {
 	}
 
 	// ── Step 1: collect participant + monitor info via GUI dialog ─────────────
-	runField := control.InfoField{
-		Name:    "run_id",
-		Label:   "Run",
-		Default: defaultRunLabel,
-		Type:    control.FieldSelect,
-		Options: runLabels,
+	// CLI flags set the defaults shown in (and used by) the dialog.
+	// Pass -headless to skip the dialog entirely and use the flag values directly.
+	fields := []control.InfoField{
+		{Name: "subject_id", Label: "Subject ID", Default: *cliSubjectID},
+		{Name: "age", Label: "Age", Default: *cliAge},
+		{Name: "gender", Label: "Gender (M / F / NB)", Default: *cliGender},
+		{Name: "handedness", Label: "Handedness (R / L)", Default: *cliHandedness},
+		{Name: "screen_width_cm", Label: "Screen width (cm)", Default: fmt.Sprintf("%g", *cliScreenWidth), Type: control.FieldNumber},
+		{Name: "viewing_distance_cm", Label: "Viewing distance (cm)", Default: fmt.Sprintf("%g", *cliViewingDistance), Type: control.FieldNumber},
+		{Name: "refresh_rate_hz", Label: "Refresh rate (Hz)", Default: fmt.Sprintf("%g", *cliRefreshRate), Type: control.FieldNumber},
+		{Name: "run_id", Label: "Run", Default: defaultRunLabel, Type: control.FieldSelect, Options: runLabels},
+		{Name: "fullscreen", Label: "Fullscreen mode", Default: fmt.Sprintf("%v", *cliFullscreen), Type: control.FieldCheckbox},
+		{Name: "display_id", Label: "Display ID (0 = primary monitor)", Default: *cliDisplay},
 	}
-	fields := make([]control.InfoField, 0, len(control.StandardFields)+3)
-	fields = append(fields, control.StandardFields...)
-	fields = append(fields, runField, control.FullscreenField, control.DisplayField)
 	info, err := control.GetParticipantInfo("Retinotopy", fields)
 	if err != nil {
 		log.Fatalf("Info dialog: %v", err)
