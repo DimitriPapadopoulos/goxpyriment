@@ -225,7 +225,7 @@ func makeStreamArrays(st streamType, constantNum int, c paramCond, ctr control.F
 // showAttractor displays an animated pulsing red circle at the centre.
 // Returns when the experimenter presses SPACE (signalling infant is attending).
 func showAttractor(exp *control.Experiment) error {
-	bottomY := float32(-exp.Screen.Height/2 + 60)
+	bottomY := float32(-exp.Screen.Height/2 + 80)
 	msg := stimuli.NewTextLine("[Experimenter] Press SPACE when infant is looking at the centre", 0, bottomY, control.Black)
 	defer msg.Unload()
 	circ := stimuli.NewCircle(60, control.Red)

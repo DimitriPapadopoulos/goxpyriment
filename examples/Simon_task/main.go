@@ -13,12 +13,11 @@ import (
 )
 
 const (
-	NTrials        = 100
-	RedKey         = control.K_F
-	GreenKey       = control.K_J
-	SquareSize     = 100
-	SquareOffset   = 300 // distance from center
-	FixationRadius = 5
+	NTrials      = 100
+	RedKey       = control.K_F
+	GreenKey     = control.K_J
+	SquareSize   = 100
+	SquareOffset = 300 // distance from center
 )
 
 type trialDef struct {
@@ -38,8 +37,6 @@ func main() {
 	exp.AddDataVariableNames([]string{"trial", "color", "position", "key", "rt", "correct", "congruency"})
 
 	// 2. Prepare stimuli
-	fixation := stimuli.NewFixCross(25, 2, control.White)
-
 	// We'll create the square stimulus on the fly during the trial loop
 	// or pre-create them for efficiency.
 	stimRedLeft := stimuli.NewRectangle(-SquareOffset, 0, SquareSize, SquareSize, control.Red)
@@ -59,7 +56,7 @@ func main() {
 	// Shuffle initial trials
 	design.ShuffleList(trials)
 
-	instrText := fmt.Sprintf("In this experiment, you will see red or green squares appearing to the left or right of the center.\n\nYour task is to identify the COLOR of the square as quickly as possible:\n\n- If the square is RED, press 'F' (left index finger)\n- If the square is GREEN, press 'J' (right index finger)\n\nA fixation cross will remain in the center of the screen.\nIf you make a mistake, the trial will be repeated later.\n\nPress the spacebar to start.")
+	instrText := "In this experiment, you will see red or green squares\nappearing to the left or right of the center.\n\nYour task is to identify the COLOR of the square as quickly as possible:\n\n- If the square is RED, press 'F' (left index finger)\n- If the square is GREEN, press 'J' (right index finger)\n\nIMPORTANT: Keep your eyes fixed on the trial counter at the center of the screen at all times. Do not move your eyes toward the square.\n\nIf you make a mistake, the trial will be repeated later.\n\nPress the spacebar to start."
 
 	// 4. Run the experiment logic
 	err := exp.Run(func() error {
@@ -69,16 +66,31 @@ func main() {
 		trialCount := 0
 		successfulCount := 0
 
+		// Performance tracking per congruency condition
+		type condStats struct {
+			hits  int
+			total int
+			rtSum int64
+		}
+		stats := map[string]*condStats{
+			"congruent":   {},
+			"incongruent": {},
+		}
+
 		for successfulCount < NTrials && len(trials) > 0 {
 			t := trials[0]
 			trials = trials[1:]
 			trialCount++
 
-			// Fixation (stays on screen)
-			exp.Show(fixation)
-			// Random delay (fixation cross remains)
+			// Trial counter at center (replaces fixation cross)
+			counter := stimuli.NewTextLine(fmt.Sprintf("%d/%d", successfulCount+1, NTrials), 0, 0, control.White)
+			exp.Show(counter)
+			// Random delay
 			delay := design.RandInt(500, 1499) // 500 to 1499 ms
 			exp.Wait(delay)
+
+			// Flush events to discard anticipatory key presses
+			exp.Keyboard.Clear()
 
 			// Stimulus selection
 			var stim *stimuli.Rectangle
@@ -96,9 +108,9 @@ func main() {
 				}
 			}
 
-			// Draw BOTH fixation and stimulus
+			// Draw counter + stimulus
 			_ = exp.Screen.Clear()
-			_ = fixation.Draw(exp.Screen)
+			_ = counter.Draw(exp.Screen)
 			_ = stim.Draw(exp.Screen)
 			_ = exp.Screen.Update()
 
@@ -121,6 +133,14 @@ func main() {
 				congruency = "congruent"
 			}
 
+			// Update performance stats
+			s := stats[congruency]
+			s.total++
+			if correct {
+				s.hits++
+				s.rtSum += rt
+			}
+
 			exp.Data.Add(trialCount, t.color, t.position, responseKey, rt, correct, congruency)
 			fmt.Printf("Subject %d, Trial %d: Color=%s, Pos=%s, Key=%d, RT=%d, Correct=%v, Congruency=%s\n", exp.SubjectID, trialCount, t.color, t.position, responseKey, rt, correct, congruency)
 
@@ -130,7 +150,6 @@ func main() {
 				insertPos := design.RandInt(0, len(trials))
 				trials = append(trials[:insertPos], append([]trialDef{t}, trials[insertPos:]...)...)
 
-				// Optional: Show error feedback
 				errorStim := stimuli.NewTextLine("WRONG!", 0, 0, control.White)
 				exp.Show(errorStim)
 				exp.Wait(1000)
@@ -138,17 +157,41 @@ func main() {
 				successfulCount++
 			}
 
-			// Inter-trial interval (fixation cross remains)
-			exp.Show(fixation)
+			// Inter-trial interval: show counter
+			exp.Show(counter)
 			exp.Wait(500)
 		}
 
 		// Explicitly save results after the loop
 		_ = exp.Data.Save()
 
-		// Final message
-		finishText := "Experiment complete!\n\nThank you for your participation.\n\nPress SPACE to exit."
-		exp.ShowInstructions(finishText)
+		// Compute and display performance summary
+		cong := stats["congruent"]
+		incong := stats["incongruent"]
+
+		avgRTCong := 0.0
+		if cong.hits > 0 {
+			avgRTCong = float64(cong.rtSum) / float64(cong.hits)
+		}
+		hitRateCong := 0.0
+		if cong.total > 0 {
+			hitRateCong = float64(cong.hits) / float64(cong.total) * 100.0
+		}
+
+		avgRTIncong := 0.0
+		if incong.hits > 0 {
+			avgRTIncong = float64(incong.rtSum) / float64(incong.hits)
+		}
+		hitRateIncong := 0.0
+		if incong.total > 0 {
+			hitRateIncong = float64(incong.hits) / float64(incong.total) * 100.0
+		}
+
+		summaryText := fmt.Sprintf(
+			"Your performance:\n\nCongruent trials:\n  Average RT: %.0f ms\n  Accuracy:   %.1f%%\n\nIncongruent trials:\n  Average RT: %.0f ms\n  Accuracy:   %.1f%%\n\nPress SPACE to exit.",
+			avgRTCong, hitRateCong, avgRTIncong, hitRateIncong,
+		)
+		exp.ShowInstructions(summaryText)
 
 		return control.EndLoop
 	})

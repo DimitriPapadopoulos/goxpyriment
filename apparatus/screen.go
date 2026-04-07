@@ -137,22 +137,28 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 	}
 
 	if fullscreen || (width == 0 && height == 0) {
-		// Create the window first without fullscreen so we can position it
-		// on the target display before enabling exclusive fullscreen.
-		window, err := sdl.CreateWindow(title, 0, 0, sdl.WINDOW_HIGH_PIXEL_DENSITY)
+		// Create the window directly with the FULLSCREEN flag.
+		// Two-step approach (create then SetFullscreen) is unreliable on
+		// KMS/DRM: SetFullscreen is asynchronous there, so window.Size()
+		// immediately after still returns the pre-fullscreen dimensions.
+		// Including WINDOW_FULLSCREEN at creation time avoids this race.
+		window, err := sdl.CreateWindow(title, 0, 0, sdl.WINDOW_HIGH_PIXEL_DENSITY|sdl.WINDOW_FULLSCREEN)
 		if err != nil {
 			return nil, err
+		}
+
+		// Block until the window reaches its final state (fullscreen mode
+		// applied, resize event processed). Required on KMS/DRM and Wayland
+		// where state changes are deferred.
+		if err := window.Sync(); err != nil {
+			window.Destroy()
+			return nil, fmt.Errorf("SyncWindow: %w", err)
 		}
 
 		if displayIndex != 0 {
 			if bounds, err := target.Bounds(); err == nil && bounds != nil {
 				window.SetPosition(bounds.X, bounds.Y)
 			}
-		}
-
-		if err := window.SetFullscreen(true); err != nil {
-			window.Destroy()
-			return nil, err
 		}
 
 		renderer, err := window.CreateRenderer("")
@@ -192,6 +198,31 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 		}
 
 		logicalSize := &sdl.FPoint{X: float32(logW), Y: float32(logH)}
+
+		// On KMS/DRM, SDL_RenderPresent submits an async drmModePageFlip whose
+		// completion event is only processed by SDL_PumpEvents. Without pumping
+		// events first, the first user-drawn frame sits in the pending-flip queue
+		// and the display continues to show the text console until the event loop
+		// runs (e.g. on the first keypress). Three blank-frame warm-up cycles are
+		// enough to flush the flip pipeline and make the display switch to
+		// graphics mode before any experiment content is drawn.
+		for i := 0; i < 3; i++ {
+			_ = renderer.SetDrawColor(bgColor.R, bgColor.G, bgColor.B, bgColor.A)
+			_ = renderer.Clear()
+			_ = renderer.Present()
+			sdl.PumpEvents()
+		}
+
+		// In KMS/DRM mode (bare TTY), SDL3 has no desktop compositor to supply a
+		// cursor shape — it must manage the cursor itself via a DRM cursor plane
+		// or software compositing. Without an explicit cursor surface, ShowCursor()
+		// makes "nothing" visible. Explicitly creating a system cursor gives SDL3
+		// a shape to render in both hardware and software fallback paths.
+		if cursor, err := sdl.CreateSystemCursor(sdl.SYSTEM_CURSOR_DEFAULT); err == nil {
+			_ = sdl.SetCursor(cursor)
+		}
+		_ = sdl.ShowCursor()
+
 		return &Screen{
 			Window:      window,
 			Renderer:    renderer,
@@ -258,6 +289,12 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 		window.Destroy()
 		return nil, err
 	}
+
+	// Ensure a cursor shape is loaded and visible (mirrors fullscreen path).
+	if cursor, err := sdl.CreateSystemCursor(sdl.SYSTEM_CURSOR_DEFAULT); err == nil {
+		_ = sdl.SetCursor(cursor)
+	}
+	_ = sdl.ShowCursor()
 
 	return s, nil
 }

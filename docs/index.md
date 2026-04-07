@@ -20,20 +20,17 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 ## Documentation
 
-It is recommended to start by skimming over [goxpyriment-paper.pdf](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment_paper.pdf) which describes the goals and features of the framework. 
-
-Then, to go further:
-
 | Document | | PDF |
 |---|---|---|
-| [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |
+| [Overall Presentation](../paper/goxpyriment-paper.pdf) | Short paper describing the project | [↓](../paper/goxpyriment-paper.pdf) |
 | [Getting Started](GettingStarted.md) | Tutorials | [↓](GettingStarted.pdf) |
 | [Gallery of Examples](GalleryOfExamples.md) | Ready-to-run experiments and demos | |
+| [Installation](Installation.md) | Install Go and build the examples | [↓](Installation.pdf) |
 | [User Manual](UserManual.md) | Core concepts explained in depth | [↓](UserManual.pdf) |
 | [Migration Guide](MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](MigrationGuide.pdf) |
 | [API Reference](API.md) | Complete function and type reference | [↓](API.pdf) |
-
----
+| [Timing-Tests](TimingTests.md) | Check the timing of your computer | [↓](TimingTests.pdf) |
+--- 
 
 ## Quick Start
 

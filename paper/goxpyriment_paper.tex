@@ -390,15 +390,16 @@ capabilities are required for EEG and fMRI paradigms that include
 video stimuli.
 
 \textbf{Eye-tracker support.} There is none for the moment. This is
-clearly a target for future releases.
+a target for future releases.
 
-\textbf{Audio recording}. There is currently no support for recording
-audio responses and measuring naming times. As SDL3 supports recording
-audio, this feature would not be too difficult to add.
+\textbf{Audio and Video recording}. There is currently no support for recording
+audio responses and measuring naming times, nor videos. As SDL3 supports recording
+audio and vido, these features could be implemented in the future.
 
 \textbf{Online deployment.} \texttt{goxpyriment} does not currently
-support web-based deployment. This should be possible in theory, by
-compiling to web assembly (wasm). We attempted it, but realized that
+support web-based deployment. In theory, this should be possible as Go
+can compile to web assembly (wasm) and SDL3 supports EMSCRIPTEN
+(\url{https://emscripten.org/}). However, when attempted it, we realized that
 the various tools involved are not yet mature enough.
 
 \textbf{Language barrier.}  Researchers who are unfamiliar with Go,
@@ -411,8 +412,8 @@ e.g., Java or Javascript. Finally, the examples and the migration guide
 we provide at \url{https://chrplr.github.io/goxpyriment}, are also
 meant to ease the transition.
 
-\textbf{Name of the project.} The name ``goxpyriment'' is hard to
-pronounce and memorize. Alas, this issue is impossible to fix.
+\textbf{Name of the project.} The name ``goxpyriment'' is quite hard to
+pronounce and memorize.
 
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
