@@ -176,52 +176,8 @@ rm -f "${MAC_ZIP}"
 (cd "${MAC_STAGE}" && zip -q -r "${MAC_ZIP}" .)
 echo "  -> ${MAC_ZIP}"
 
-# --- SDL3 bundling helper ----------------------------------------------------
-# Copy libSDL3.so.0* from the system into a lib/ subdirectory of the given
-# stage directory. Skips silently if the library is not found (local builds
-# without SDL3 installed; users can install SDL3 system-wide instead).
-bundle_sdl3() {
-  local stage="$1"
-  local libdir
-  # Try common multilib paths; pick the first glob that matches.
-  for candidate in \
-      /usr/lib/x86_64-linux-gnu/libSDL3.so.0* \
-      /usr/lib/aarch64-linux-gnu/libSDL3.so.0* \
-      /usr/lib/libSDL3.so.0* \
-      /usr/local/lib/libSDL3.so.0* ; do
-    # Use a subshell so the glob failure doesn't abort the script.
-    libdir="$(ls ${candidate} 2>/dev/null | head -1)"
-    [[ -n "${libdir}" ]] && break
-  done
-
-  if [[ -z "${libdir}" ]]; then
-    echo "  (SDL3 not found — skipping library bundle; install libsdl3-0 on target)"
-    return
-  fi
-
-  mkdir -p "${stage}/lib"
-  cp ${candidate%\**}* "${stage}/lib/" 2>/dev/null || true
-  echo "  bundled SDL3: $(ls "${stage}/lib/")"
-}
-
-# Write a run.sh wrapper that prepends the bundled lib/ to LD_LIBRARY_PATH.
-write_run_sh() {
-  local stage="$1"
-  cat > "${stage}/run.sh" <<'RUNSH'
-#!/usr/bin/env bash
-# Run a goxpyriment binary with the bundled SDL3 library.
-# Usage: ./run.sh <binary-name> [flags]
-#   e.g. ./run.sh hello_world -w
-#        ./run.sh tests/Timing-Tests -test display
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export LD_LIBRARY_PATH="${SCRIPT_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-exec "${SCRIPT_DIR}/$@"
-RUNSH
-  chmod +x "${stage}/run.sh"
-}
-
 # =============================================================================
-# 3. Linux x86_64 — binaries + bundled SDL3
+# 3. Linux x86_64 — plain binaries: examples + tests
 # =============================================================================
 
 echo "=== Building Linux x86_64 binaries ==="
@@ -247,29 +203,13 @@ while IFS= read -r dir; do
     "${dir}"
 done < <(test_dirs)
 
-# Bundle the x86_64 SDL3 shared library and a wrapper script.
-# Binaries load libSDL3.so.0 at runtime via purego (not linked statically).
-(
-  # Restrict glob search to x86_64 paths for this target.
-  candidate=/usr/lib/x86_64-linux-gnu/libSDL3.so.0*
-  stage="${X86_STAGE}"
-  if ls ${candidate} 2>/dev/null | head -1 | grep -q .; then
-    mkdir -p "${stage}/lib"
-    cp ${candidate} "${stage}/lib/" 2>/dev/null || true
-    echo "  bundled SDL3 (x86_64): $(ls "${stage}/lib/")"
-  else
-    bundle_sdl3 "${stage}"
-  fi
-)
-write_run_sh "${X86_STAGE}"
-
 LINUX_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-x86_64.tar.gz"
 rm -f "${LINUX_TARBALL}"
 (cd "${X86_STAGE}" && tar czf "${LINUX_TARBALL}" .)
 echo "  -> ${LINUX_TARBALL}"
 
 # =============================================================================
-# 4. Linux arm64 (Raspberry Pi) — binaries + bundled SDL3
+# 4. Linux arm64 (Raspberry Pi) — plain binaries: examples + tests
 # =============================================================================
 
 echo "=== Building Linux arm64 (Raspberry Pi) binaries ==="
@@ -294,20 +234,6 @@ while IFS= read -r dir; do
     -o "${ARM64_STAGE}/tests/${name}" \
     "${dir}"
 done < <(test_dirs)
-
-# Bundle the arm64 SDL3 shared library.
-(
-  candidate=/usr/lib/aarch64-linux-gnu/libSDL3.so.0*
-  stage="${ARM64_STAGE}"
-  if ls ${candidate} 2>/dev/null | head -1 | grep -q .; then
-    mkdir -p "${stage}/lib"
-    cp ${candidate} "${stage}/lib/" 2>/dev/null || true
-    echo "  bundled SDL3 (arm64): $(ls "${stage}/lib/")"
-  else
-    bundle_sdl3 "${stage}"
-  fi
-)
-write_run_sh "${ARM64_STAGE}"
 
 ARM64_TARBALL="${OUT_DIR}/goxpyriment-examples-linux-arm64.tar.gz"
 rm -f "${ARM64_TARBALL}"

@@ -57,19 +57,9 @@ go build ./...
 
 Most examples accept `-w` for windowed mode (1024×768 window), `-d N` for display selection (monitor index, -1 = primary), and `-s <id>` for subject ID.
 
-### SDL3 runtime requirement
+### SDL3 is bundled — no system install required
 
-`go-sdl3` uses `purego` to load `libSDL3.so.0` at runtime via `dlopen`. SDL3 is **not** bundled in the Go binary — it must be installed on the target machine:
-
-```bash
-# Ubuntu 24.04+
-sudo apt install libsdl3-0
-
-# Fedora / RHEL
-sudo dnf install SDL3
-```
-
-Pre-built binaries (from GitHub releases) bundle `libSDL3.so.0` in a `lib/` subdirectory and include a `run.sh` wrapper that sets `LD_LIBRARY_PATH` automatically. Use `./run.sh <binary> [flags]` instead of running the binary directly.
+SDL3, SDL3_ttf, and SDL3_image are embedded as gzip-compressed blobs inside the Go binary via `go-sdl3`'s `binsdl`/`binttf`/`binimg` packages (see `vendor/github.com/Zyko0/go-sdl3/bin/`). `control.Initialize()` calls `binsdl.Load()` which decompresses the library to a temp directory and loads it via `dlopen`. No system SDL3 package is needed on the target machine.
 
 ### NVIDIA + X11 — fullscreen rendering
 
