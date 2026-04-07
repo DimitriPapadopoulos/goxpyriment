@@ -44,6 +44,7 @@ Programs that open a **GetParticipantInfo** dialog collect all setup interactive
 Full experiments that record and save behavioural data to an `.csv` file in `goxpy_data/`.
 
 <!-- BEGIN:experiments -->
+
 | Directory | Task | Reference |
 |-----------|------|-----------|
 | [Attention-Posner-Task](https://github.com/chrplr/goxpyriment/tree/main/examples/Attention-Posner-Task) | Arrow cue directs covert attention; measure cost/benefit on reaction time to a peripheral target | Posner (1980) |
@@ -66,6 +67,7 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 | [Mental-Rotation-2D](https://github.com/chrplr/goxpyriment/tree/main/examples/Mental-Rotation-2D) | Decide whether two 3-D figures are identical or mirror images; RT increases linearly with angular disparity | Shepard & Metzler (1971) |
 | [Mental-Rotation-3D](https://github.com/chrplr/goxpyriment/tree/main/examples/Mental-Rotation-3D) | Decide whether two 3D figures (procedurally generated assemblies of cubes) are identical or mirror images; RT increases linearly with angular disparity. | Shepard & Metzler (1971) |
 | [Multiple-Object-Tracking](https://github.com/chrplr/goxpyriment/tree/main/examples/Multiple-Object-Tracking) | Track a subset of identical moving targets among distractors; evidence for a parallel tracking mechanism | Pylyshyn & Storm (1988) |
+| [Number-Change-Detection](https://github.com/chrplr/goxpyriment/tree/main/examples/Number-Change-Detection) | Two concurrent dot-array streams (5 vs 20 dots) test infants' preference for numerosity change; experimenter codes looking direction in real time | Decarli, Piazza & Izard (2023) |
 | [Number-Comparison](https://github.com/chrplr/goxpyriment/tree/main/examples/Number-Comparison) | Compare numerical magnitudes of digits and dot patterns; stimulus group (digits / regular / irregular / random) selected via GetParticipantInfo UI | Buckley & Gillman (1974) |
 | [Number-Double-Digits-Comparison](https://github.com/chrplr/goxpyriment/tree/main/examples/Number-Double-Digits-Comparison) | Compare two-digit numbers against a fixed standard (55 or 65); two experiments with different response-key mappings | Dehaene et al. (1990) |
 | [parity_decision](https://github.com/chrplr/goxpyriment/tree/main/examples/parity_decision) | Classify single digits (0–9) as even or odd (F / J keys) |  |
@@ -77,13 +79,14 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 | [Simon_task](https://github.com/chrplr/goxpyriment/tree/main/examples/Simon_task) | Identify colour of a square regardless of its screen position; congruent trials are faster | Simon (1969) |
 | [simple_reaction_times](https://github.com/chrplr/goxpyriment/tree/main/examples/simple_reaction_times) | 20-trial simple RT task: press any key as quickly as possible when a target appears |  |
 | [Statistical-Learning-Auditory](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Auditory) | Statistical learning of tone sequences: exposure to a continuous tone stream with structured transitional probabilities, probed with 2AFC or head-turn preference | Saffran et al. (1999) |
-| [Statistical-Learning-Visual](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Visual) | Implicit learning of statistical regularities in a shape stream, probed with forced-choice and RT tests | Turk-Browne et al. (2005) |
 | [Statistical-Learning-Community-Structure](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Community-Structure) | Implicit learning of community structure in a continuous visual sequence, with random-walk exposure and spacebar-based event segmentation | Schapiro et al. (2013) |
+| [Statistical-Learning-Visual](https://github.com/chrplr/goxpyriment/tree/main/examples/Statistical-Learning-Visual) | Implicit learning of statistical regularities in a shape stream, probed with forced-choice and RT tests | Turk-Browne et al. (2005) |
 | [Stroop_task](https://github.com/chrplr/goxpyriment/tree/main/examples/Stroop_task) | Name the ink colour of colour words; incongruent trials (e.g. RED in blue ink) are slower | Stroop (1935) |
 | [Subliminal-Priming](https://github.com/chrplr/goxpyriment/tree/main/examples/Subliminal-Priming) | Masked word priming: words rendered invisible by surrounding masks still influence processing | Dehaene et al. (2004) |
 | [Temporal-Integration-Word-Recognition](https://github.com/chrplr/goxpyriment/tree/main/examples/Temporal-Integration-Word-Recognition) | Alternating odd/even letter components at variable SOA; Exp 1 (subjective report: 0/1/2 words perceived) and Exp 2 (lexical decision with RT); experiment selected via GetParticipantInfo UI | Forget et al. (2010) |
 | [Trubutschek_Unconscious_Working_Memory](https://github.com/chrplr/goxpyriment/tree/main/examples/Trubutschek_Unconscious_Working_Memory) | Probe access to briefly presented stimuli below and above the threshold of consciousness | Trübutschek et al. (2017) |
 | [Visual-Illusion-Lilac-Chaser](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Lilac-Chaser) | Lilac chaser illusion: a ring of disappearing disks produces a rotating green afterimage |  |
+
 <!-- END:experiments -->
 
 ---
@@ -93,6 +96,7 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 Visual illusions, interactive showcases, and minimal templates. Most do not write a data file.
 
 <!-- BEGIN:demos -->
+
 | Directory | Description |
 |-----------|-------------|
 | [canvas_demo](https://github.com/chrplr/goxpyriment/tree/main/examples/canvas_demo) | Drawing on an off-screen `Canvas` surface before presenting it in one frame |
@@ -109,6 +113,7 @@ Visual illusions, interactive showcases, and minimal templates. Most do not writ
 | [Visual-Angle-Calibration](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Angle-Calibration) | Draws concentric rings at 2°, 5°, and 10° of visual angle for a quick sanity-check of the `units.Monitor` calibration |
 | [Visual-Illusion-Ebbginghaus](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Ebbginghaus) | Animated Ebbinghaus (Titchener circles) size-contrast illusion |
 | [Visual-Illusion-Kanizsa](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Kanizsa) | Kanizsa illusory-contour square: a square is perceived where none is drawn |
+
 <!-- END:demos -->
 
 ---
