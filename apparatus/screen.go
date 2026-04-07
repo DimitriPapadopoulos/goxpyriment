@@ -184,18 +184,42 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 			return nil, err
 		}
 
-		// Query the logical (OS) pixel dimensions. On standard displays these
-		// equal the physical pixel dimensions. On HiDPI displays (macOS Retina,
-		// some Linux setups) the OS logical size is smaller than the physical
-		// pixel count by the content-scale factor.
+		// Warm-up: present several blank frames to flush driver state before
+		// any experiment content is drawn.
+		//   - KMS/DRM: SDL_RenderPresent submits an async drmModePageFlip;
+		//     PumpEvents is required to process the completion event and switch
+		//     the display from the text console to graphics mode.
+		//   - Vulkan/OpenGL on X11: the first few presents may be discarded
+		//     while the compositor or driver initialises the swap chain.
+		//   - Wayland: PumpEvents is required to let the compositor assign the
+		//     real window dimensions; window.Size() before this loop returns 1×1
+		//     (e.g. software renderer on Raspberry Pi).
+		// 10 frames is conservative but still imperceptible (<200 ms at 60 Hz).
+		for i := 0; i < 10; i++ {
+			_ = renderer.SetDrawColor(bgColor.R, bgColor.G, bgColor.B, bgColor.A)
+			_ = renderer.Clear()
+			_ = renderer.Present()
+			sdl.PumpEvents()
+		}
+
+		// Query the logical (OS) pixel dimensions after the warmup loop so that
+		// the Wayland compositor has had a chance to assign the real window size.
+		// On standard displays these equal the physical pixel dimensions; on HiDPI
+		// displays (macOS Retina, some Linux setups) they are smaller by the
+		// content-scale factor. We set a logical presentation matching this size
+		// so all drawing commands operate in the logical coordinate space and SDL3
+		// handles physical upscaling transparently.
 		//
-		// We set a logical presentation matching the logical size so that all
-		// drawing commands and coordinate math operate in the logical coordinate
-		// space. SDL3 then handles the physical upscaling transparently. This
-		// keeps experiment code free of HiDPI concerns on all platforms.
+		// Fallback chain: window.Size() → display bounds → (0,0 — no presentation)
 		logW, logH, err := window.Size()
-		if err != nil {
-			logW, logH = 0, 0
+		if err != nil || logW <= 1 || logH <= 1 {
+			// Wayland with software renderer may still return 1×1 — fall back to
+			// the display's reported bounds.
+			if bounds, berr := target.Bounds(); berr == nil && bounds != nil && bounds.W > 1 {
+				logW, logH = bounds.W, bounds.H
+			} else {
+				logW, logH = 0, 0
+			}
 		}
 
 		if logW > 0 && logH > 0 {
@@ -209,21 +233,6 @@ func NewScreen(title string, width, height int, bgColor sdl.Color, fullscreen bo
 		}
 
 		logicalSize := &sdl.FPoint{X: float32(logW), Y: float32(logH)}
-
-		// Warm-up: present several blank frames to flush driver state before
-		// any experiment content is drawn.
-		//   - KMS/DRM: SDL_RenderPresent submits an async drmModePageFlip;
-		//     PumpEvents is required to process the completion event and switch
-		//     the display from the text console to graphics mode.
-		//   - Vulkan/OpenGL on X11: the first few presents may be discarded
-		//     while the compositor or driver initialises the swap chain.
-		// 10 frames is conservative but still imperceptible (<200 ms at 60 Hz).
-		for i := 0; i < 10; i++ {
-			_ = renderer.SetDrawColor(bgColor.R, bgColor.G, bgColor.B, bgColor.A)
-			_ = renderer.Clear()
-			_ = renderer.Present()
-			sdl.PumpEvents()
-		}
 
 		// In KMS/DRM mode (bare TTY), SDL3 has no desktop compositor to supply a
 		// cursor shape — it must manage the cursor itself via a DRM cursor plane
