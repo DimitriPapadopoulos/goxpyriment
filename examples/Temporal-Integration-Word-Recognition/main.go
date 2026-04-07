@@ -759,7 +759,7 @@ func main() {
 
 	allWords, lexicon, err := loadWords(bytes.NewReader(wordsData))
 	if err != nil {
-		log.Fatalf("loading words.tsv: %v", err)
+		exp.Fatal("loading words.tsv: %v", err)
 	}
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -794,7 +794,7 @@ func main() {
 			len(wt), len(pw), len(wt)+len(pw))
 
 	default:
-		log.Fatalf("unknown experiment %d", expNum)
+		exp.Fatal("unknown experiment %d", expNum)
 	}
 
 	design.ShuffleList(trials)
@@ -809,6 +809,6 @@ func main() {
 		}
 		return runErr
 	}); err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

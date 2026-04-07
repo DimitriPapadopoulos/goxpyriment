@@ -449,8 +449,8 @@ add a udev rule to make it permanent.
 
 ## Tier 3 — Stimulus timing validation
 
-The tests in this tier require a photodiode taped to the corner of your screen
-(where bright stimuli appear) and an oscilloscope. They answer the question:
+The tests in this tier require a photodiode taped to your screen
+and an oscilloscope. They answer the question:
 *does the monitor actually show what the software reports?*
 
 ### `frames` — visual onset vs. trigger alignment
@@ -644,12 +644,12 @@ For the `stream` test, onset jitter and SOA error are directly in the
 
 ## Improving timing on your system
 
-**Linux (recommended platform for timing-critical experiments):**
+**Linux**
 - Disable the desktop compositor: use a plain window manager (i3, openbox) or
-  start the experiment from a virtual terminal (`Ctrl+Alt+F2`).
+  start the experiment from a virtual terminal (`Ctrl+Alt+F2`) and disable the window system (`systemctl stop gdm`) .
 - Run the experiment process with real-time scheduling:
   ```bash
-  chrt -r 99 Timing-Tests -test display -duration-s 30
+  sudo chrt -r 99 Timing-Tests -test display -duration-s 30
   ```
 - Reduce USB trigger latency (see DLP-IO8-G section above).
 - Disable CPU frequency scaling: `cpupower frequency-set -g performance`.

@@ -4,7 +4,6 @@
 package main
 
 import (
-	"log"
 	"math"
 
 	"github.com/chrplr/goxpyriment/clock"
@@ -224,7 +223,7 @@ func main() {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("instruction error: %v", err)
+		exp.Fatal("instruction error: %v", err)
 	}
 
 	exp.AddDataVariableNames([]string{"trial", "target_idx", "delay", "distractor", "rating"})
@@ -275,7 +274,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("training trial error: %v", err)
+			exp.Fatal("training trial error: %v", err)
 		}
 
 		// Simple feedback rule: if a target was present, ratings 1 (unseen) are treated as errors;
@@ -299,10 +298,10 @@ func main() {
 		control.White,
 	)
 	if err := exp.Show(trainDone); err != nil {
-		log.Fatalf("training-finished screen error: %v", err)
+		exp.Fatal("training-finished screen error: %v", err)
 	}
 	if _, err := exp.Keyboard.Wait(); err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("training-finished wait error: %v", err)
+		exp.Fatal("training-finished wait error: %v", err)
 	}
 
 	// Main experimental trials (logged; no additional buzzer feedback).
@@ -312,7 +311,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				break
 			}
-			log.Fatalf("trial error: %v", err)
+			exp.Fatal("trial error: %v", err)
 		}
 
 		exp.Data.Add(

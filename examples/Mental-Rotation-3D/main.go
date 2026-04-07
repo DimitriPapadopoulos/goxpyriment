@@ -11,7 +11,6 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -542,7 +541,7 @@ func main() {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("instruction error: %v", err)
+		exp.Fatal("instruction error: %v", err)
 	}
 
 	block := design.NewBlock("Main Block")
@@ -593,7 +592,7 @@ func main() {
 				if control.IsEndLoop(err) {
 					return
 				}
-				log.Fatalf("keyboard error: %v", err)
+				exp.Fatal("keyboard error: %v", err)
 			}
 			if key != 0 {
 				break

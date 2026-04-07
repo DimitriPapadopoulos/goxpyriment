@@ -685,7 +685,7 @@ func main() {
 	// ── Preload tones ─────────────────────────────────────────────────────────
 	tones, tErr := preloadToneSet(exp, trainWords, testOthers)
 	if tErr != nil {
-		log.Fatalf("preloadToneSet: %v", tErr)
+		exp.Fatal("preloadToneSet: %v", tErr)
 	}
 	defer func() {
 		for _, t := range tones {
@@ -723,6 +723,6 @@ func main() {
 	})
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
-		log.Fatalf("experiment error: %v", runErr)
+		exp.Fatal("experiment error: %v", runErr)
 	}
 }

@@ -199,13 +199,13 @@ func main() {
 	// ── Fonts ─────────────────────────────────────────────────────────────────
 	letterFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 120)
 	if err != nil {
-		log.Fatalf("letter font: %v", err)
+		exp.Fatal("letter font: %v", err)
 	}
 	defer letterFont.Close()
 
 	feedbackFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 40)
 	if err != nil {
-		log.Fatalf("feedback font: %v", err)
+		exp.Fatal("feedback font: %v", err)
 	}
 	defer feedbackFont.Close()
 
@@ -356,6 +356,6 @@ func main() {
 	})
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
-		log.Fatalf("experiment error: %v", runErr)
+		exp.Fatal("experiment error: %v", runErr)
 	}
 }

@@ -151,7 +151,7 @@ func main() {
 	case 2:
 		standard = 65
 	default:
-		log.Fatalf("-exp must be 1 or 2, got %d", *expNum)
+		exp.Fatal("-exp must be 1 or 2, got %d", *expNum)
 	}
 
 	group := *groupFlag
@@ -159,7 +159,7 @@ func main() {
 		switch group {
 		case "LR", "LL":
 		default:
-			log.Fatalf("-group must be LR or LL for exp 2, got %q", group)
+			exp.Fatal("-group must be LR or LL for exp 2, got %q", group)
 		}
 	} else {
 		group = "LR" // experiment 1 uses right=larger
@@ -177,14 +177,14 @@ func main() {
 	// Large font for the target number.
 	bigFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 120)
 	if err != nil {
-		log.Fatalf("load big font: %v", err)
+		exp.Fatal("load big font: %v", err)
 	}
 	defer bigFont.Close()
 
 	// Medium font for the standard label and response reminder.
 	medFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 36)
 	if err != nil {
-		log.Fatalf("load medium font: %v", err)
+		exp.Fatal("load medium font: %v", err)
 	}
 	defer medFont.Close()
 

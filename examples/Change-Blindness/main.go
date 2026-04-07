@@ -278,6 +278,6 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

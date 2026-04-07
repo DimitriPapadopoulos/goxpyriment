@@ -42,14 +42,14 @@ func main() {
 	// 2. Load stimuli from CSV
 	file, err := os.Open(stimFile)
 	if err != nil {
-		log.Fatalf("failed to open stimuli file: %v", err)
+		exp.Fatal("failed to open stimuli file: %v", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		log.Fatalf("failed to read stimuli: %v", err)
+		exp.Fatal("failed to read stimuli: %v", err)
 	}
 
 	// Assume first line is header: item,category
@@ -122,6 +122,6 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

@@ -202,7 +202,7 @@ func main() {
 	// ── Visual stimuli ────────────────────────────────────────────────────────
 	letterFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 100)
 	if err != nil {
-		log.Fatalf("letter font: %v", err)
+		exp.Fatal("letter font: %v", err)
 	}
 	defer letterFont.Close()
 
@@ -399,6 +399,6 @@ func main() {
 	})
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
-		log.Fatalf("experiment error: %v", runErr)
+		exp.Fatal("experiment error: %v", runErr)
 	}
 }

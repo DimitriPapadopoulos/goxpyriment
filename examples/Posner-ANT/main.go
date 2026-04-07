@@ -152,14 +152,14 @@ func main() {
 
 	trials, err := loadTrials(csvData)
 	if err != nil {
-		log.Fatalf("failed to load trials: %v", err)
+		exp.Fatal("failed to load trials: %v", err)
 	}
 	design.ShuffleList(trials)
 
 	// ── Stimuli ──────────────────────────────────────────────────────────────
 	arrowFont, err := control.FontFromMemory(assets_embed.InconsolataFont, 50)
 	if err != nil {
-		log.Fatalf("failed to load arrow font: %v", err)
+		exp.Fatal("failed to load arrow font: %v", err)
 	}
 	defer arrowFont.Close()
 
@@ -326,6 +326,6 @@ func main() {
 	})
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
-		log.Fatalf("experiment error: %v", runErr)
+		exp.Fatal("experiment error: %v", runErr)
 	}
 }

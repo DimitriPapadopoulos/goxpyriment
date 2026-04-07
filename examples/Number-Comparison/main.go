@@ -266,7 +266,7 @@ func main() {
 	case "digits":
 		digitFont, err := control.FontFromMemory(assets_embed.InconsolataFont, digitPt)
 		if err != nil {
-			log.Fatalf("load digit font: %v", err)
+			exp.Fatal("load digit font: %v", err)
 		}
 		defer digitFont.Close()
 		for n := 1; n <= 9; n++ {
@@ -285,7 +285,7 @@ func main() {
 		for n := 1; n <= 9; n++ {
 			data, err := fs.ReadFile(fmt.Sprintf("%s/dot_%d.png", prefix, n))
 			if err != nil {
-				log.Fatalf("load %s dot %d: %v", group, n, err)
+				exp.Fatal("load %s dot %d: %v", group, n, err)
 			}
 			p := stimuli.NewPictureFromMemory(data, 0, 0)
 			p.Width = stimPx

@@ -487,7 +487,7 @@ func main() {
 
 	exp.AddDataVariableNames([]string{"trial_num", "condition", "word", "word_duration_ms", "estimated_word_duration_ms", "response", "rt_ms", "reported_word"})
 	if err := exp.Data.Save(); err != nil {
-		log.Fatalf("failed to write data header: %v", err)
+		exp.Fatal("failed to write data header: %v", err)
 	}
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -505,13 +505,13 @@ func main() {
 	if resolvedPath != "" {
 		wordFont, err = control.FontFromFile(resolvedPath, wordFontSize)
 		if err != nil {
-			log.Fatalf("failed to load font %q: %v", resolvedPath, err)
+			exp.Fatal("failed to load font %q: %v", resolvedPath, err)
 		}
 		fmt.Printf("[font] using %q\n", resolvedPath)
 	} else {
 		wordFont, err = control.FontFromMemory(assets_embed.InconsolataFont, wordFontSize)
 		if err != nil {
-			log.Fatalf("failed to load word font: %v", err)
+			exp.Fatal("failed to load word font: %v", err)
 		}
 		fmt.Println("[font] using embedded Inconsolata")
 	}
@@ -562,13 +562,13 @@ func main() {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("instruction error: %v", err)
+		exp.Fatal("instruction error: %v", err)
 	}
 	if err := exp.Keyboard.WaitKey(control.K_SPACE); err != nil {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("wait key error: %v", err)
+		exp.Fatal("wait key error: %v", err)
 	}
 
 	// Shuffle word pool and build a cyclic word dispenser.
@@ -669,7 +669,7 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 	fmt.Printf("Results saved in %s\n", exp.Data.FullPath)
 }

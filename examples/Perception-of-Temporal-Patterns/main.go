@@ -224,7 +224,7 @@ func main() {
 	case "cymbal":
 		s := stimuli.NewSoundFromMemory(cymbalBytes)
 		if err := s.PreloadDevice(exp.AudioDevice); err != nil {
-			log.Fatalf("failed to preload cymbal: %v", err)
+			exp.Fatal("failed to preload cymbal: %v", err)
 		}
 		sound = s
 	default: // "tone"
@@ -232,7 +232,7 @@ func main() {
 		t := stimuli.NewComplexTone(
 			[]float64{830, 2490, 4150, 5810}, toneDurMs, toneRampMs, 0.3)
 		if err := t.PreloadDevice(exp.AudioDevice); err != nil {
-			log.Fatalf("failed to preload tone: %v", err)
+			exp.Fatal("failed to preload tone: %v", err)
 		}
 		sound = t
 	}

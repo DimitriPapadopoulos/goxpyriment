@@ -1351,20 +1351,31 @@ func main() {
 		exp.ScreenNumber = *fDisplay
 	}
 	if err := exp.Initialize(); err != nil {
+		exp.End() // release any SDL subsystems already initialised before exiting
 		log.Fatalf("failed to initialize experiment: %v", err)
 	}
 	defer exp.End()
 
 	// Handle Ctrl-C (SIGINT) and SIGTERM so the process exits cleanly.
+	// Only save data here — do NOT call exp.End() (which calls sdl.Quit via
+	// CGo) from this goroutine while the main goroutine may be inside an SDL
+	// CGo call.  Concurrent SDL access from two OS threads causes a SIGSEGV.
+	// os.Exit skips deferred functions, so SDL is never touched from here.
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 		<-ch
-		exp.End()
+		if exp.Data != nil {
+			exp.Data.WriteEndTime()
+			if err := exp.Data.Save(); err == nil {
+				log.Printf("Results saved in %s", exp.Data.FullPath)
+			}
+		}
 		os.Exit(0)
 	}()
 
 	if *fTest == "" {
+		exp.End() // release any SDL subsystems already initialised before exiting
 		log.Fatal("usage: go run main.go -test <check|display|latency|stream|vrr|trigger|frames|flash|tones|av|rt> [flags]\n" +
 			"       (legacy aliases: jitter=display  drain=latency  square=trigger  sound=tones  audio=check)")
 	}
@@ -1409,6 +1420,7 @@ func main() {
 	case "rt":
 		runErr = runRT(exp, trig)
 	default:
+		exp.End() // release any SDL subsystems already initialised before exiting
 		log.Fatalf("unknown test %q — choose from: check display latency stream vrr trigger frames flash tones av rt\n"+
 			"  (legacy aliases: audio=check  jitter=display  drain=latency  square=trigger  sound=tones)", *fTest)
 	}

@@ -31,7 +31,7 @@ func main() {
 	// 3. Identify .mpg files in assets
 	files, err := os.ReadDir("assets")
 	if err != nil {
-		log.Fatalf("failed to read assets: %v", err)
+		exp.Fatal("failed to read assets: %v", err)
 	}
 
 	var videoFiles []string
@@ -54,12 +54,12 @@ func main() {
 
 	leftVid, err := stimuli.NewVideo(exp.Screen, leftPath)
 	if err != nil {
-		log.Fatalf("Left video error: %v", err)
+		exp.Fatal("Left video error: %v", err)
 	}
 
 	rightVid, err := stimuli.NewVideo(exp.Screen, rightPath)
 	if err != nil {
-		log.Fatalf("Right video error: %v", err)
+		exp.Fatal("Right video error: %v", err)
 	}
 
 	fmt.Println("Controls: [SPACE] Pause/Resume, [R] Sync Rewind, [S] Skip, [ESC] Quit")

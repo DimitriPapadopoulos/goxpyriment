@@ -81,7 +81,7 @@ func main() {
 	}
 
 	if len(wordPool) < 30 {
-		log.Fatalf("word pool too small for this example")
+		exp.Fatal("word pool too small for this example")
 	}
 
 	// Build studied pairs: words that will be seen later at test ("old" items).
@@ -156,7 +156,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("study error: %v", err)
+			exp.Fatal("study error: %v", err)
 		}
 
 		clock.Wait(p.LagMs)
@@ -166,7 +166,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("test error: %v", err)
+			exp.Fatal("test error: %v", err)
 		}
 
 		exp.Data.Add(
@@ -195,7 +195,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("new test error: %v", err)
+			exp.Fatal("new test error: %v", err)
 		}
 		exp.Data.Add(
 			trialIndex,

@@ -526,7 +526,7 @@ func main() {
 		isLC = false
 
 	default:
-		log.Fatalf("unknown experiment %d: use -exp 1 or -exp 2", *expNum)
+		exp.Fatal("unknown experiment %d: use -exp 1 or -exp 2", *expNum)
 	}
 
 	// ── Derived geometric parameters ─────────────────────────────────────────
@@ -623,6 +623,6 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

@@ -27,7 +27,7 @@ func main() {
 
 	files, err := os.ReadDir("assets")
 	if err != nil {
-		log.Fatalf("failed to read assets directory: %v", err)
+		exp.Fatal("failed to read assets directory: %v", err)
 	}
 
 	var videoFiles []string

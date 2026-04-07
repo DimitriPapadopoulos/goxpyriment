@@ -78,7 +78,7 @@ func main() {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("instruction error: %v", err)
+		exp.Fatal("instruction error: %v", err)
 	}
 
 	// 1. Create Design
@@ -157,7 +157,7 @@ func main() {
 				if control.IsEndLoop(err) {
 					return
 				}
-				log.Fatalf("keyboard error: %v", err)
+				exp.Fatal("keyboard error: %v", err)
 			}
 			if key != 0 {
 				break

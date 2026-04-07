@@ -7,6 +7,10 @@ package control
 import (
 	"flag"
 	"log"
+	"os"
+	"os/signal"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -88,7 +92,8 @@ type Experiment struct {
 	imgLoader interface{ Unload() }
 	ttfLoader interface{ Unload() }
 
-	event EventState
+	event    EventState
+	quitFlag atomic.Int32 // set to 1 by signal handler goroutine; checked by pumpFrame
 }
 
 // Do executes the given function on the current goroutine (which is the
@@ -349,6 +354,9 @@ func (e *Experiment) pumpFrame() error {
 	if len(kbState) > int(sdl.SCANCODE_ESCAPE) && kbState[sdl.SCANCODE_ESCAPE] {
 		return sdl.EndLoop
 	}
+	if e.quitFlag.Load() != 0 {
+		return sdl.EndLoop
+	}
 	return nil
 }
 
@@ -482,6 +490,29 @@ func (e *Experiment) Initialize() error {
 	if len(e.Info) > 0 {
 		e.Data.WriteParticipantInfo(e.Info)
 	}
+
+	// Handle Ctrl-C and SIGTERM: set quit flag so pumpFrame exits Run() cleanly
+	// on the main goroutine. Never call End()/sdl.Quit() from here — concurrent
+	// CGo calls from two OS threads cause SIGSEGV. Save data and fall back to
+	// os.Exit after a timeout in case the main goroutine is blocked outside Run()
+	// (e.g. apparatus.Keyboard.Wait).
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+		<-ch
+		e.quitFlag.Store(1)
+		if e.Data != nil {
+			e.Data.WriteEndTime()
+			if err := e.Data.Save(); err == nil {
+				log.Printf("Results saved in %s", e.Data.FullPath)
+			}
+		}
+		// Give pumpFrame up to 3 s to detect the flag so defer End() can run
+		// from the main goroutine. If the main goroutine is blocked outside Run(),
+		// force-exit as a last resort.
+		time.Sleep(3 * time.Second)
+		os.Exit(0)
+	}()
 
 	return nil
 }
@@ -750,6 +781,14 @@ func (e *Experiment) End() {
 	if e.sdlLoader != nil {
 		e.sdlLoader.Unload()
 	}
+}
+
+// Fatal cleans up SDL resources, then logs the formatted message and exits.
+// Use this instead of log.Fatalf anywhere after exp.Initialize() succeeds, to
+// ensure sdl.Quit() is called before the process exits.
+func (e *Experiment) Fatal(format string, args ...any) {
+	e.End()
+	log.Fatalf(format, args...)
 }
 
 // Run executes the main experiment logic inside SDL's run loop.

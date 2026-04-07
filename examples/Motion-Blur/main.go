@@ -36,7 +36,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"runtime/debug"
 	"time"
 
@@ -173,7 +172,7 @@ func main() {
 	if err := exp.Run(func() error {
 		return animLoop(exp)
 	}); err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("run: %v", err)
+		exp.Fatal("run: %v", err)
 	}
 }
 

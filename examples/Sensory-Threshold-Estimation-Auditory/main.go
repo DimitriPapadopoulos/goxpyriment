@@ -283,7 +283,7 @@ func main() {
 
 	freqs, err := parseFreqs(*freqsFlag)
 	if err != nil {
-		log.Fatalf("bad -freqs: %v", err)
+		exp.Fatal("bad -freqs: %v", err)
 	}
 
 	exp.AddDataVariableNames([]string{
@@ -398,6 +398,6 @@ func main() {
 	})
 
 	if runErr != nil && !control.IsEndLoop(runErr) {
-		log.Fatalf("experiment error: %v", runErr)
+		exp.Fatal("experiment error: %v", runErr)
 	}
 }

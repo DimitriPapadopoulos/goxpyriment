@@ -4,7 +4,6 @@
 package main
 
 import (
-	"log"
 	"math"
 
 	"github.com/chrplr/goxpyriment/clock"
@@ -94,6 +93,6 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

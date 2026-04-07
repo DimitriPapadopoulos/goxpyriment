@@ -16,7 +16,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 
@@ -235,7 +234,7 @@ func main() {
 	for i, freqs := range allFreqs {
 		t := stimuli.NewComplexTone(freqs, toneDurMs, toneRampMs, 0.5)
 		if err := t.PreloadDevice(exp.AudioDevice); err != nil {
-			log.Fatalf("failed to preload tone %d: %v", i, err)
+			exp.Fatal("failed to preload tone %d: %v", i, err)
 		}
 		tones[i] = t
 	}
@@ -483,6 +482,6 @@ func main() {
 	})
 
 	if err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment error: %v", err)
+		exp.Fatal("experiment error: %v", err)
 	}
 }

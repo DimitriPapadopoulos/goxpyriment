@@ -4,7 +4,6 @@
 package main
 
 import (
-	"log"
 	"strings"
 
 	"github.com/chrplr/goxpyriment/clock"
@@ -89,7 +88,7 @@ func main() {
 		if control.IsEndLoop(err) {
 			return
 		}
-		log.Fatalf("instruction error: %v", err)
+		exp.Fatal("instruction error: %v", err)
 	}
 
 	// Tones
@@ -234,7 +233,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("training trial error: %v", err)
+			exp.Fatal("training trial error: %v", err)
 		}
 	}
 
@@ -243,10 +242,10 @@ func main() {
 		650, control.FPoint{}, control.White,
 	)
 	if err := exp.Show(trainDone); err != nil {
-		log.Fatalf("training-finished screen error: %v", err)
+		exp.Fatal("training-finished screen error: %v", err)
 	}
 	if _, err := exp.Keyboard.Wait(); err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("training-finished wait error: %v", err)
+		exp.Fatal("training-finished wait error: %v", err)
 	}
 
 	// Main block (logged, no buzzer feedback).
@@ -255,7 +254,7 @@ func main() {
 			if control.IsEndLoop(err) {
 				return
 			}
-			log.Fatalf("trial error: %v", err)
+			exp.Fatal("trial error: %v", err)
 		}
 	}
 }

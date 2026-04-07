@@ -33,7 +33,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"runtime/debug"
@@ -561,6 +560,6 @@ func main() {
 		}
 		return control.EndLoop
 	}); err != nil && !control.IsEndLoop(err) {
-		log.Fatalf("experiment: %v", err)
+		exp.Fatal("experiment: %v", err)
 	}
 }
