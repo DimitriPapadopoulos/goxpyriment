@@ -100,13 +100,13 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"sort"
 	"syscall"
 	"time"
 
 	"github.com/chrplr/goxpyriment/clock"
 	"github.com/chrplr/goxpyriment/control"
 	"github.com/chrplr/goxpyriment/stimuli"
+	"github.com/chrplr/goxpyriment/tests/internal/timingstats"
 	"github.com/chrplr/goxpyriment/triggers"
 )
 
@@ -137,120 +137,6 @@ var (
 	fWindowed       = flag.Bool("w", false, "Windowed mode (1024×768 window instead of fullscreen)")
 	fDisplay        = flag.Int("d", -1, "Display index: monitor where the window/fullscreen will open (-1 = primary)")
 )
-
-// ── Statistics helper ──────────────────────────────────────────────────────────
-
-type stats struct {
-	mean, sd, minV, maxV, p5, p95 float64
-	late05, late1                 int // count > 0.5 ms and > 1 ms from target
-	n                             int
-	vals                          []float64 // raw values, kept for histogram
-}
-
-func computeStats(deltas []float64, targetMs float64) stats {
-	n := len(deltas)
-	if n == 0 {
-		return stats{}
-	}
-	var sum float64
-	mn, mx := deltas[0], deltas[0]
-	for _, v := range deltas {
-		sum += v
-		if v < mn {
-			mn = v
-		}
-		if v > mx {
-			mx = v
-		}
-	}
-	mean := sum / float64(n)
-	var sqSum float64
-	var late05, late1 int
-	for _, v := range deltas {
-		sqSum += (v - mean) * (v - mean)
-		dev := math.Abs(v - targetMs)
-		if dev > 0.5 {
-			late05++
-		}
-		if dev > 1.0 {
-			late1++
-		}
-	}
-	sd := 0.0
-	if n > 1 {
-		sd = math.Sqrt(sqSum / float64(n-1))
-	}
-	sorted := make([]float64, n)
-	copy(sorted, deltas)
-	sort.Float64s(sorted)
-	p5 := sorted[n*5/100]
-	p95 := sorted[n*95/100]
-	return stats{mean, sd, mn, mx, p5, p95, late05, late1, n, deltas}
-}
-
-func printStats(label string, s stats, targetMs float64) {
-	fmt.Printf("\n── %s ───────────────────────────────\n", label)
-	fmt.Printf("  n       : %d\n", s.n)
-	fmt.Printf("  target  : %.3f ms\n", targetMs)
-	fmt.Printf("  mean    : %.3f ms\n", s.mean)
-	fmt.Printf("  SD      : %.3f ms\n", s.sd)
-	fmt.Printf("  min/max : %.3f / %.3f ms\n", s.minV, s.maxV)
-	fmt.Printf("  p5/p95  : %.3f / %.3f ms\n", s.p5, s.p95)
-	fmt.Printf("  >0.5 ms : %d (%.1f %%)\n", s.late05, 100*float64(s.late05)/float64(s.n))
-	fmt.Printf("  >1.0 ms : %d (%.1f %%)\n", s.late1, 100*float64(s.late1)/float64(s.n))
-	printHistogram(s.vals)
-}
-
-// printHistogram prints a 10-bin ASCII histogram of vals to stdout.
-// Each bar shows the bin range, count, and a proportional bar of '*' characters.
-func printHistogram(vals []float64) {
-	const nBins = 10
-	const barWidth = 40 // max bar length in characters
-	n := len(vals)
-	if n == 0 {
-		return
-	}
-	mn, mx := vals[0], vals[0]
-	for _, v := range vals {
-		if v < mn {
-			mn = v
-		}
-		if v > mx {
-			mx = v
-		}
-	}
-	binW := (mx - mn) / nBins
-	if binW == 0 {
-		binW = 1
-	}
-	counts := make([]int, nBins)
-	for _, v := range vals {
-		b := int((v - mn) / binW)
-		if b >= nBins {
-			b = nBins - 1
-		}
-		counts[b]++
-	}
-	maxCount := 0
-	for _, c := range counts {
-		if c > maxCount {
-			maxCount = c
-		}
-	}
-	fmt.Printf("  histogram (%d bins):\n", nBins)
-	for i := 0; i < nBins; i++ {
-		lo := mn + float64(i)*binW
-		hi := lo + binW
-		bar := ""
-		if maxCount > 0 {
-			stars := counts[i] * barWidth / maxCount
-			for j := 0; j < stars; j++ {
-				bar += "*"
-			}
-		}
-		fmt.Printf("  [%7.3f, %7.3f) ms : %5d  %s\n", lo, hi, counts[i], bar)
-	}
-}
 
 // ── Screen fill helper ─────────────────────────────────────────────────────────
 
@@ -391,13 +277,13 @@ func runFrames(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 		}
 
 		// Use measured mean as deviation reference — no -hz needed.
-		sDur := computeStats(brightDurations, 0)
-		sDur = computeStats(brightDurations, sDur.mean)
-		printStats(fmt.Sprintf("Bright-phase duration (frames-on=%d)", framesOn), sDur, sDur.mean)
+		sDur := timingstats.ComputeStats(brightDurations, 0)
+		sDur = timingstats.ComputeStats(brightDurations, sDur.Mean)
+		timingstats.PrintStats(fmt.Sprintf("Bright-phase duration (frames-on=%d)", framesOn), sDur, sDur.Mean)
 
-		sPer := computeStats(periods, 0)
-		sPer = computeStats(periods, sPer.mean)
-		printStats(fmt.Sprintf("Period (frames-on=%d + frames-off=%d)", framesOn, framesOff), sPer, sPer.mean)
+		sPer := timingstats.ComputeStats(periods, 0)
+		sPer = timingstats.ComputeStats(periods, sPer.Mean)
+		timingstats.PrintStats(fmt.Sprintf("Period (frames-on=%d + frames-off=%d)", framesOn, framesOff), sPer, sPer.Mean)
 
 		return control.EndLoop
 	})
@@ -518,15 +404,15 @@ func runJitter(exp *control.Experiment) error {
 
 		// Compute stats using the measured mean as target so that >0.5 ms / >1.0 ms
 		// counts reflect deviation from actual frame rate, not a hardcoded 60 Hz assumption.
-		s := computeStats(intervals, 16.67) // first pass to obtain mean
+		s := timingstats.ComputeStats(intervals, 16.67) // first pass to obtain mean
 		estimatedHz := 0.0
-		if s.mean > 0 {
-			estimatedHz = 1000.0 / s.mean
-			s = computeStats(intervals, s.mean) // recompute late counts against actual mean
+		if s.Mean > 0 {
+			estimatedHz = 1000.0 / s.Mean
+			s = timingstats.ComputeStats(intervals, s.Mean) // recompute late counts against actual mean
 		}
 		fmt.Printf("\nEstimated refresh rate: %.3f Hz  (use -hz %.2f for frames/flash targets)\n",
 			estimatedHz, estimatedHz)
-		printStats("Frame intervals", s, s.mean)
+		timingstats.PrintStats("Frame intervals", s, s.Mean)
 		return control.EndLoop
 	})
 }
@@ -611,8 +497,8 @@ func runSquare(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 		}
 
 		_ = trig.SetLow(*fTriggerPin)
-		printStats("Rising-edge jitter (ms from target)", computeStats(riseJitter, 0), 0)
-		printStats("Falling-edge jitter (ms from target)", computeStats(fallJitter, 0), 0)
+		timingstats.PrintStats("Rising-edge jitter (ms from target)", timingstats.ComputeStats(riseJitter, 0), 0)
+		timingstats.PrintStats("Falling-edge jitter (ms from target)", timingstats.ComputeStats(fallJitter, 0), 0)
 		return control.EndLoop
 	})
 }
@@ -751,8 +637,8 @@ func runSound(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 			)
 		}
 
-		printStats("Onset error vs target (ms)", computeStats(onsetErrors, 0), 0)
-		printStats("Inter-onset interval (ms)", computeStats(ioiVals, float64(soaMs)), float64(soaMs))
+		timingstats.PrintStats("Onset error vs target (ms)", timingstats.ComputeStats(onsetErrors, 0), 0)
+		timingstats.PrintStats("Inter-onset interval (ms)", timingstats.ComputeStats(ioiVals, float64(soaMs)), float64(soaMs))
 		return control.EndLoop
 	})
 }
@@ -841,7 +727,7 @@ func runRT(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 			fmt.Printf("trial %3d  RT = %.1f ms\n", i, rtMs)
 		}
 
-		printStats("RT (ms, event-timestamp method)", computeStats(rtValues, 0), 0)
+		timingstats.PrintStats("RT (ms, event-timestamp method)", timingstats.ComputeStats(rtValues, 0), 0)
 		return control.EndLoop
 	})
 }
@@ -1052,9 +938,9 @@ func runStream(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 			}
 		}
 
-		printStats(fmt.Sprintf("Duration error (target %.2f ms)", targetOnMs), computeStats(durationErrors, 0), 0)
+		timingstats.PrintStats(fmt.Sprintf("Duration error (target %.2f ms)", targetOnMs), timingstats.ComputeStats(durationErrors, 0), 0)
 		if len(intervalErrors) > 0 {
-			printStats(fmt.Sprintf("SOA error (target %.2f ms)", targetSOAms), computeStats(intervalErrors, 0), 0)
+			timingstats.PrintStats(fmt.Sprintf("SOA error (target %.2f ms)", targetSOAms), timingstats.ComputeStats(intervalErrors, 0), 0)
 		}
 		return control.EndLoop
 	})
@@ -1203,8 +1089,8 @@ func runVRR(exp *control.Experiment, trig triggers.OutputTTLDevice) error {
 				}
 			}
 
-			s := computeStats(durationErrors, 0)
-			fmt.Printf("── %3d ms: mean=%+.3f ms  SD=%.3f ms\n", targetMs, s.mean, s.sd)
+			s := timingstats.ComputeStats(durationErrors, 0)
+			fmt.Printf("── %3d ms: mean=%+.3f ms  SD=%.3f ms\n", targetMs, s.Mean, s.SD)
 		}
 
 		return control.EndLoop
@@ -1293,11 +1179,11 @@ func runDrain(exp *control.Experiment) error {
 			tone.Unload()
 			// Report drain_ms statistics with nominal duration as the target.
 			// mean − target = audio pipeline latency; SD = drain-time jitter.
-			s := computeStats(drainVals, float64(durMs))
+			s := timingstats.ComputeStats(drainVals, float64(durMs))
 			fmt.Printf("\n")
-			printStats(fmt.Sprintf("Drain time for %d ms tone (latency = mean − target)", durMs),
+			timingstats.PrintStats(fmt.Sprintf("Drain time for %d ms tone (latency = mean − target)", durMs),
 				s, float64(durMs))
-			fmt.Printf("  pipeline latency ≈ %.1f ms\n", s.mean-float64(durMs))
+			fmt.Printf("  pipeline latency ≈ %.1f ms\n", s.Mean-float64(durMs))
 		}
 
 		return control.EndLoop

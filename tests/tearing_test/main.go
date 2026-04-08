@@ -28,16 +28,15 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"runtime/debug"
-	"sort"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
+	"github.com/chrplr/goxpyriment/apparatus"
 	"github.com/chrplr/goxpyriment/clock"
 	"github.com/chrplr/goxpyriment/control"
-	"github.com/chrplr/goxpyriment/apparatus"
 	"github.com/chrplr/goxpyriment/stimuli"
+	"github.com/chrplr/goxpyriment/tests/internal/timingstats"
 )
 
 const (
@@ -49,118 +48,6 @@ const (
 	hudFontSize = float32(18)
 	warmup      = 10 // frames discarded from statistics at startup
 )
-
-// ── Statistics (mirrors tests/Timing-Tests/main.go) ──────────────────────────
-
-type stats struct {
-	mean, sd, minV, maxV, p5, p95 float64
-	late05, late1                  int
-	n                              int
-	vals                           []float64
-}
-
-func computeStats(deltas []float64, targetMs float64) stats {
-	n := len(deltas)
-	if n == 0 {
-		return stats{}
-	}
-	var sum float64
-	mn, mx := deltas[0], deltas[0]
-	for _, v := range deltas {
-		sum += v
-		if v < mn {
-			mn = v
-		}
-		if v > mx {
-			mx = v
-		}
-	}
-	mean := sum / float64(n)
-	var sqSum float64
-	var late05, late1 int
-	for _, v := range deltas {
-		sqSum += (v - mean) * (v - mean)
-		dev := math.Abs(v - targetMs)
-		if dev > 0.5 {
-			late05++
-		}
-		if dev > 1.0 {
-			late1++
-		}
-	}
-	sd := 0.0
-	if n > 1 {
-		sd = math.Sqrt(sqSum / float64(n-1))
-	}
-	sorted := make([]float64, n)
-	copy(sorted, deltas)
-	sort.Float64s(sorted)
-	p5 := sorted[n*5/100]
-	p95 := sorted[n*95/100]
-	return stats{mean, sd, mn, mx, p5, p95, late05, late1, n, deltas}
-}
-
-func printStats(label string, s stats, targetMs float64) {
-	fmt.Printf("\n── %s ───────────────────────────────\n", label)
-	fmt.Printf("  n       : %d\n", s.n)
-	fmt.Printf("  target  : %.3f ms\n", targetMs)
-	fmt.Printf("  mean    : %.3f ms\n", s.mean)
-	fmt.Printf("  SD      : %.3f ms\n", s.sd)
-	fmt.Printf("  min/max : %.3f / %.3f ms\n", s.minV, s.maxV)
-	fmt.Printf("  p5/p95  : %.3f / %.3f ms\n", s.p5, s.p95)
-	fmt.Printf("  >0.5 ms : %d (%.1f %%)\n", s.late05, 100*float64(s.late05)/float64(s.n))
-	fmt.Printf("  >1.0 ms : %d (%.1f %%)\n", s.late1, 100*float64(s.late1)/float64(s.n))
-	printHistogram(s.vals)
-}
-
-func printHistogram(vals []float64) {
-	const nBins = 10
-	const barWidth = 40
-	n := len(vals)
-	if n == 0 {
-		return
-	}
-	mn, mx := vals[0], vals[0]
-	for _, v := range vals {
-		if v < mn {
-			mn = v
-		}
-		if v > mx {
-			mx = v
-		}
-	}
-	binW := (mx - mn) / nBins
-	if binW == 0 {
-		binW = 1
-	}
-	counts := make([]int, nBins)
-	for _, v := range vals {
-		b := int((v - mn) / binW)
-		if b >= nBins {
-			b = nBins - 1
-		}
-		counts[b]++
-	}
-	maxCount := 0
-	for _, c := range counts {
-		if c > maxCount {
-			maxCount = c
-		}
-	}
-	fmt.Printf("  histogram (%d bins):\n", nBins)
-	for i := 0; i < nBins; i++ {
-		lo := mn + float64(i)*binW
-		hi := lo + binW
-		bar := ""
-		if maxCount > 0 {
-			stars := counts[i] * barWidth / maxCount
-			for j := 0; j < stars; j++ {
-				bar += "*"
-			}
-		}
-		fmt.Printf("  [%7.3f, %7.3f) ms : %5d  %s\n", lo, hi, counts[i], bar)
-	}
-}
 
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 
@@ -340,14 +227,14 @@ func animLoop(exp *control.Experiment, initBarWidth, initSpeed float32) error {
 	}
 
 	// ---- Print statistics (same format as the jitter sub-test) -----------------
-	s := computeStats(intervals, 16.67) // first pass
+	s := timingstats.ComputeStats(intervals, 16.67) // first pass
 	estimatedHz := 0.0
-	if s.mean > 0 {
-		estimatedHz = 1000.0 / s.mean
-		s = computeStats(intervals, s.mean) // recompute late counts against actual mean
+	if s.Mean > 0 {
+		estimatedHz = 1000.0 / s.Mean
+		s = timingstats.ComputeStats(intervals, s.Mean) // recompute late counts against actual mean
 	}
 	fmt.Printf("\nEstimated refresh rate: %.3f Hz\n", estimatedHz)
-	printStats("Frame intervals", s, s.mean)
+	timingstats.PrintStats("Frame intervals", s, s.Mean)
 
 	return control.EndLoop
 }
