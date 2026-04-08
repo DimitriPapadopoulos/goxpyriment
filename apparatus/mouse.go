@@ -21,6 +21,11 @@ type Mouse struct {
 	// timestamp (nanoseconds). Injected by the control layer; used by
 	// GetPressEventTS.
 	PollButtonsWithTS func() (uint32, uint64, bool)
+
+	// PollButtonUps is like PollButtonsWithTS but returns the first
+	// MOUSE_BUTTON_UP event seen in the current polling cycle. Injected by
+	// the control layer; used by WaitButtonReleaseTS.
+	PollButtonUps func() (uint32, uint64, bool)
 }
 
 // ShowCursor shows or hides the mouse cursor.
@@ -213,4 +218,106 @@ func (m *Mouse) Check() (uint32, error) {
 		}
 	}
 	return 0, nil
+}
+
+// IsPressed reports whether the given mouse button is physically held down at
+// the moment of the call. It uses sdl.GetMouseState which returns a bitmask of
+// currently-pressed buttons — no event queue involvement.
+//
+// button should be one of sdl.BUTTON_LEFT, sdl.BUTTON_MIDDLE, sdl.BUTTON_RIGHT,
+// sdl.BUTTON_X1, or sdl.BUTTON_X2.
+func (m *Mouse) IsPressed(button uint32) bool {
+	flags, _, _ := sdl.GetMouseState()
+	return flags&sdl.ButtonMask(sdl.MouseButtonFlags(button)) != 0
+}
+
+// waitSDLMouseUpEvent is the fallback SDL event loop for WaitButtonReleaseTS
+// when no injected PollButtonUps callback is available. It blocks until the
+// specified button generates a MOUSE_BUTTON_UP event, ESC/quit, or timeout.
+//
+// Return values:
+//   - (ts, nil)     — MOUSE_BUTTON_UP for button; ts is its hardware timestamp
+//   - (0, EndLoop)  — ESC KEY_DOWN or window-close quit event
+//   - (0, nil)      — timeout
+func waitSDLMouseUpEvent(button uint32, start uint64, timeoutMS int) (uint64, error) {
+	for {
+		var event sdl.Event
+		var hasEvent bool
+
+		if timeoutMS < 0 {
+			if sdl.WaitEvent(&event) == nil {
+				hasEvent = true
+			}
+		} else {
+			elapsed := int(sdl.Ticks() - start)
+			remaining := timeoutMS - elapsed
+			if remaining <= 0 {
+				return 0, nil
+			}
+			if sdl.WaitEventTimeout(&event, int32(remaining)) {
+				hasEvent = true
+			} else {
+				if int(sdl.Ticks()-start) >= timeoutMS {
+					return 0, nil
+				}
+				continue
+			}
+		}
+
+		if !hasEvent {
+			continue
+		}
+
+		switch event.Type {
+		case sdl.EVENT_QUIT:
+			return 0, sdl.EndLoop
+		case sdl.EVENT_KEY_DOWN:
+			if event.KeyboardEvent().Key == sdl.K_ESCAPE {
+				return 0, sdl.EndLoop
+			}
+		case sdl.EVENT_MOUSE_BUTTON_UP:
+			me := event.MouseButtonEvent()
+			if uint32(me.Button) == button {
+				return me.Timestamp, nil
+			}
+		}
+	}
+}
+
+// WaitButtonReleaseTS blocks until the given mouse button is released
+// (MOUSE_BUTTON_UP event) and returns the SDL3 hardware event timestamp in
+// nanoseconds.
+//
+// Combined with the button-down timestamp from GetPressEventTS, this gives
+// nanosecond-precision press duration:
+//
+//	btn, downTS, _ := exp.Mouse.GetPressEventTS(-1)
+//	upTS, _        := exp.Mouse.WaitButtonReleaseTS(btn, 5000)
+//	durationNS     := upTS - downTS
+//
+// Pass timeoutMS = -1 for no timeout. On timeout returns (0, nil).
+// On ESC or quit returns (0, sdl.EndLoop).
+func (m *Mouse) WaitButtonReleaseTS(button uint32, timeoutMS int) (uint64, error) {
+	start := sdl.Ticks()
+
+	if m.PollButtonUps != nil {
+		for {
+			if timeoutMS >= 0 {
+				if int(sdl.Ticks()-start) >= timeoutMS {
+					return 0, nil
+				}
+			}
+			btnUp, ts, quit := m.PollButtonUps()
+			if quit {
+				return 0, sdl.EndLoop
+			}
+			if btnUp == button {
+				return ts, nil
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
+
+	// Fallback: direct SDL event polling when no callback is injected.
+	return waitSDLMouseUpEvent(button, start, timeoutMS)
 }

@@ -21,6 +21,10 @@ type Keyboard struct {
 	// (nanoseconds, same clock as sdl.TicksNS()). Injected by the control layer
 	// alongside PollKeys; used by GetKeyEventRT.
 	PollKeysWithTS func() (sdl.Keycode, uint64, bool)
+
+	// PollKeyUps is like PollKeysWithTS but returns the first KEY_UP event
+	// seen in the current polling cycle. Injected by the control layer.
+	PollKeyUps func() (sdl.Keycode, uint64, bool)
 }
 
 // waitSDLKeyEvent is the shared fallback SDL event loop used by WaitKeys and
@@ -242,18 +246,41 @@ func (k *Keyboard) GetKeyEventTS(keys []sdl.Keycode, timeoutMS int) (sdl.Keycode
 	return waitSDLKeyEvent(keys, start, timeoutMS)
 }
 
+// simultaneityWindowMS is the time after the first key event during which
+// GetKeyEventsTS continues collecting additional key events. Human
+// "simultaneous" bilateral presses are typically 10–50 ms apart; 50 ms
+// captures nearly all of them without adding noticeable delay to single-key
+// trials.
+const simultaneityWindowMS = 50
+
 // GetKeyEventsTS waits for one or more matching key events and returns ALL
-// that are available, ordered by hardware timestamp (earliest first).
+// that arrived, ordered by hardware timestamp (earliest first).
 //
-// It blocks until at least one matching event arrives (like GetKeyEventTS),
-// then non-blockingly drains any additional key events already in the SDL
-// queue. This is useful for detecting simultaneous or near-simultaneous
-// presses. In the common case only one event is returned.
+// The function operates in two phases:
 //
-// Pass timeoutMS = -1 for no timeout. On timeout, returns (nil, nil).
-// On ESC or quit, returns sdl.EndLoop (with any events collected so far).
+//  1. It blocks until the first matching key arrives, respecting timeoutMS
+//     (pass -1 for no timeout). This is identical to GetKeyEventTS.
+//
+//  2. After the first key, it waits up to simultaneityWindowMS (50 ms) for
+//     any additional matching keys. This second phase is necessary because
+//     human "simultaneous" bilateral presses (e.g. both hands at once) are
+//     rarely truly simultaneous — the two KEY_DOWN events typically arrive
+//     10–50 ms apart. A non-blocking drain after phase 1 would miss the
+//     second key almost every time.
+//
+// In the common single-response case only one event is returned, with at most
+// 50 ms of extra latency before the function returns. In the bilateral case
+// both events are returned with their exact hardware timestamps, so inter-key
+// lag is simply events[1].TimestampNS - events[0].TimestampNS.
+//
+// On timeout (phase 1), returns (nil, nil). On ESC or quit, returns
+// sdl.EndLoop with any events collected so far.
+
 func (k *Keyboard) GetKeyEventsTS(keys []sdl.Keycode, timeoutMS int) ([]InputEvent, error) {
-	firstKey, firstTS, err := k.GetKeyEventTS(keys, timeoutMS)
+	// Wait for the first matching key using the raw SDL event loop (not the
+	// injected callback, which would discard simultaneous events via PollEvents).
+	start := sdl.Ticks()
+	firstKey, firstTS, err := waitSDLKeyEvent(keys, start, timeoutMS)
 	if err != nil {
 		return nil, err
 	}
@@ -261,11 +288,41 @@ func (k *Keyboard) GetKeyEventsTS(keys []sdl.Keycode, timeoutMS int) ([]InputEve
 		return nil, nil // timeout
 	}
 
-	first := InputEvent{Device: DeviceKeyboard, Key: firstKey, TimestampNS: firstTS}
+	all := []InputEvent{{Device: DeviceKeyboard, Key: firstKey, TimestampNS: firstTS}}
 
-	// Non-blockingly drain any additional key events already in the queue.
-	rest, quit := drainMatchingKeyEvents(keys)
-	all := append([]InputEvent{first}, rest...)
+	// After the first key, wait up to simultaneityWindowMS for additional
+	// matching keys. A non-blocking drain is not enough: the second key event
+	// may still be in transit from the OS when the first one is returned.
+	windowEnd := sdl.Ticks() + simultaneityWindowMS
+	for {
+		remaining := int(windowEnd - sdl.Ticks())
+		if remaining <= 0 {
+			break
+		}
+		var ev sdl.Event
+		if !sdl.WaitEventTimeout(&ev, int32(remaining)) {
+			break // window expired with no further events
+		}
+		switch ev.Type {
+		case sdl.EVENT_QUIT:
+			return all, sdl.EndLoop
+		case sdl.EVENT_KEY_DOWN:
+			ke := ev.KeyboardEvent()
+			if ke.Key == sdl.K_ESCAPE {
+				return all, sdl.EndLoop
+			}
+			matched := keys == nil
+			for _, kc := range keys {
+				if ke.Key == kc {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				all = append(all, InputEvent{Device: DeviceKeyboard, Key: ke.Key, TimestampNS: ke.Timestamp})
+			}
+		}
+	}
 
 	// Sort by hardware timestamp (typically already in order).
 	for i := 1; i < len(all); i++ {
@@ -274,46 +331,62 @@ func (k *Keyboard) GetKeyEventsTS(keys []sdl.Keycode, timeoutMS int) ([]InputEve
 		}
 	}
 
-	if quit {
-		return all, sdl.EndLoop
-	}
 	return all, nil
 }
 
-// drainMatchingKeyEvents non-blockingly reads all currently queued key events
-// and returns those matching keys (any key if keys is nil), plus whether a
-// quit or ESC event was encountered.
-func drainMatchingKeyEvents(keys []sdl.Keycode) ([]InputEvent, bool) {
-	var events []InputEvent
-	var ev sdl.Event
-	for sdl.PollEvent(&ev) {
+
+// CollectKeyEventsTS records all matching key events that occur during a fixed
+// time window and returns them ordered by hardware timestamp (earliest first).
+//
+// Unlike GetKeyEventsTS — which returns shortly after the first key arrives —
+// CollectKeyEventsTS always runs for the full durationMS regardless of how
+// many keys are pressed. Use it when you need a complete record of all presses
+// within a known period, for example:
+//
+//   - Finger-tapping tasks (count and time every tap over N seconds)
+//   - Free-response windows where the participant may press multiple keys
+//   - Logging all responses during a stimulus stream
+//
+// Pass keys = nil to accept any key. Pass durationMS = 0 to do a
+// non-blocking drain of whatever is already in the SDL queue. Returns an
+// empty (non-nil) slice if no matching key was pressed. Returns sdl.EndLoop
+// on ESC or window close, with any events collected up to that point.
+func (k *Keyboard) CollectKeyEventsTS(keys []sdl.Keycode, durationMS int) ([]InputEvent, error) {
+	var all []InputEvent
+	start := sdl.Ticks()
+
+	for {
+		elapsed := int(sdl.Ticks() - start)
+		remaining := durationMS - elapsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		var ev sdl.Event
+		if !sdl.WaitEventTimeout(&ev, int32(remaining)) {
+			break // duration elapsed (or durationMS==0 and queue empty)
+		}
 		switch ev.Type {
 		case sdl.EVENT_QUIT:
-			return events, true
+			return all, sdl.EndLoop
 		case sdl.EVENT_KEY_DOWN:
 			ke := ev.KeyboardEvent()
 			if ke.Key == sdl.K_ESCAPE {
-				return events, true
+				return all, sdl.EndLoop
 			}
 			matched := keys == nil
-			if !matched {
-				for _, kc := range keys {
-					if ke.Key == kc {
-						matched = true
-						break
-					}
+			for _, kc := range keys {
+				if ke.Key == kc {
+					matched = true
+					break
 				}
 			}
 			if matched {
-				events = append(events, InputEvent{
-					Device:      DeviceKeyboard,
-					Key:         ke.Key,
-					TimestampNS: ke.Timestamp,
-				})
+				all = append(all, InputEvent{Device: DeviceKeyboard, Key: ke.Key, TimestampNS: ke.Timestamp})
 			}
 		}
 	}
-	return events, false
+
+	return all, nil
 }
 
 // Clear drains the entire SDL event queue — keyboard, mouse, gamepad, and all
@@ -326,4 +399,111 @@ func (k *Keyboard) Clear() {
 	for sdl.PollEvent(&event) {
 		// Just drain the queue
 	}
+}
+
+// IsPressed reports whether the given key is physically held down at the
+// moment of the call. It uses SDL's scancode state array (sdl.GetKeyboardState),
+// which is updated by sdl.PumpEvents — no event queue involvement.
+//
+// Typical use: polling a held key during a stimulus loop, or checking that the
+// participant has released a key before starting the next trial.
+//
+// Note: call sdl.PumpEvents (or exp.PollEvents) in the same loop to keep the
+// window responsive and handle ESC/quit. IsPressed itself calls PumpEvents so
+// the state snapshot is always fresh.
+func (k *Keyboard) IsPressed(key sdl.Keycode) bool {
+	sdl.PumpEvents()
+	scancode := key.ScancodeFromKey(nil)
+	state := sdl.GetKeyboardState()
+	return int(scancode) < len(state) && state[scancode]
+}
+
+// waitSDLKeyUpEvent is the fallback SDL event loop for WaitKeyReleaseTS when
+// no injected PollKeyUps callback is available. It blocks until the specified
+// key generates a KEY_UP event, ESC/quit, or the timeout expires.
+//
+// Return values:
+//   - (ts, nil)       — KEY_UP for key was received; ts is its hardware timestamp
+//   - (0, EndLoop)    — ESC KEY_DOWN or window-close quit event
+//   - (0, nil)        — timeout
+func waitSDLKeyUpEvent(key sdl.Keycode, start uint64, timeoutMS int) (uint64, error) {
+	for {
+		var event sdl.Event
+		var hasEvent bool
+
+		if timeoutMS < 0 {
+			if sdl.WaitEvent(&event) == nil {
+				hasEvent = true
+			}
+		} else {
+			elapsed := int(sdl.Ticks() - start)
+			remaining := timeoutMS - elapsed
+			if remaining <= 0 {
+				return 0, nil
+			}
+			if sdl.WaitEventTimeout(&event, int32(remaining)) {
+				hasEvent = true
+			} else {
+				if int(sdl.Ticks()-start) >= timeoutMS {
+					return 0, nil
+				}
+				continue
+			}
+		}
+
+		if !hasEvent {
+			continue
+		}
+
+		switch event.Type {
+		case sdl.EVENT_QUIT:
+			return 0, sdl.EndLoop
+		case sdl.EVENT_KEY_DOWN:
+			if event.KeyboardEvent().Key == sdl.K_ESCAPE {
+				return 0, sdl.EndLoop
+			}
+		case sdl.EVENT_KEY_UP:
+			ke := event.KeyboardEvent()
+			if ke.Key == key {
+				return ke.Timestamp, nil
+			}
+		}
+	}
+}
+
+// WaitKeyReleaseTS blocks until the given key is released (KEY_UP event) and
+// returns the SDL3 hardware event timestamp in nanoseconds.
+//
+// Combined with the KEY_DOWN timestamp from GetKeyEventTS, this gives
+// nanosecond-precision keypress duration:
+//
+//	key, downTS, _ := kb.GetKeyEventTS(keys, -1)
+//	upTS, _        := kb.WaitKeyReleaseTS(key, -1)
+//	durationNS     := upTS - downTS
+//
+// Pass timeoutMS = -1 for no timeout. On timeout returns (0, nil).
+// On ESC or quit returns (0, sdl.EndLoop).
+func (k *Keyboard) WaitKeyReleaseTS(key sdl.Keycode, timeoutMS int) (uint64, error) {
+	start := sdl.Ticks()
+
+	if k.PollKeyUps != nil {
+		for {
+			if timeoutMS >= 0 {
+				if int(sdl.Ticks()-start) >= timeoutMS {
+					return 0, nil
+				}
+			}
+			keyUp, ts, quit := k.PollKeyUps()
+			if quit {
+				return 0, sdl.EndLoop
+			}
+			if keyUp == key {
+				return ts, nil
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
+
+	// Fallback: direct SDL event polling when no callback is injected.
+	return waitSDLKeyUpEvent(key, start, timeoutMS)
 }

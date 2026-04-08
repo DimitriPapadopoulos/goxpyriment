@@ -559,6 +559,12 @@ key, eventTS, err := exp.Keyboard.GetKeyEventTS([]control.Keycode{control.K_F, c
 // Non-blocking poll — returns 0 if nothing pressed
 key, err := exp.Keyboard.Check()
 
+// Query whether a key is physically held down right now (no event queue involvement)
+held := exp.Keyboard.IsPressed(control.K_SPACE)
+
+// Wait for KEY_UP on a specific key; returns its SDL hardware timestamp (nanoseconds)
+upTS, err := exp.Keyboard.WaitKeyReleaseTS(key, -1)
+
 // Drain all pending key events (use before a new trial to discard stale presses)
 exp.Keyboard.Clear()
 ```
@@ -591,18 +597,71 @@ rtToPrime := int64(eventTS - onset1)  // RT from prime onset
 
 **Collecting multiple simultaneous responses — `GetKeyEventsTS`:**
 
-In rare cases you may want to capture *all* key events that occurred, not just the first. `GetKeyEventsTS` blocks until at least one matching event arrives, then non-blockingly drains any additional events already in the SDL queue and returns them all as a `[]apparatus.InputEvent` sorted by hardware timestamp:
+In rare cases you may want to capture *all* key events, not just the first. `GetKeyEventsTS` is designed for detecting bilateral responses (e.g. both hands pressing at once) and works in two phases:
+
+1. **Phase 1** — blocks until the first matching key arrives, respecting the timeout exactly like `GetKeyEventTS`.
+2. **Phase 2** — waits up to 50 ms for any additional matching keys.
+
+The second phase is necessary because human "simultaneous" presses are rarely truly simultaneous — the two KEY_DOWN events typically arrive 10–50 ms apart. Without this window, a non-blocking drain after the first key would miss the second key almost every time.
 
 ```go
 events, err := exp.Keyboard.GetKeyEventsTS(responseKeys, 3000)
 if len(events) > 0 {
     firstKey := events[0].Key
     firstTS  := events[0].TimestampNS
-    rtNS := int64(firstTS - onset)
+    rtNS     := int64(firstTS - onset)
+}
+if len(events) == 2 {
+    lagNS := int64(events[1].TimestampNS - events[0].TimestampNS)
 }
 ```
 
-This is useful for detecting simultaneous bilateral responses (e.g. both hands pressed at once) or for logging all presses within a trial window. For the typical single-response case, `GetKeyEventTS` is simpler.
+In the common single-response case only one event is returned, at the cost of at most 50 ms of extra latency before the function returns. For the typical single-response trial, `GetKeyEventTS` avoids that overhead entirely.
+
+**Recording all presses over a fixed duration — `CollectKeyEventsTS`:**
+
+When the goal is to record *everything* the participant presses within a known time window (finger-tapping, free-response periods, stimulus-stream logging), use `CollectKeyEventsTS`. Unlike `GetKeyEventsTS`, it always runs for the full duration — it does not return early on the first keypress:
+
+```go
+// Record every tap of F or J over 5 seconds
+exp.Keyboard.Clear()
+onset, _ := exp.ShowTS(stim)
+events, err := exp.Keyboard.CollectKeyEventsTS(
+    []control.Keycode{control.K_F, control.K_J}, 5000)
+for _, ev := range events {
+    rtNS := int64(ev.TimestampNS - onset)
+    fmt.Printf("key %s at %d ms\n", ev.Key.KeyName(), rtNS/1_000_000)
+}
+```
+
+Pass `keys = nil` to capture any key. Pass `durationMS = 0` to do a non-blocking drain of whatever is already in the queue. Returns an empty (non-nil) slice if nothing was pressed.
+
+**Querying whether a key is currently held — `IsPressed`:**
+
+`IsPressed` queries SDL's internal scancode state array and returns `true` if the key is physically depressed at the instant of the call, regardless of the event queue. It is useful in animation loops that need to react continuously to a held key, or to verify that the participant has released a key before starting a new trial:
+
+```go
+for exp.Keyboard.IsPressed(control.K_SPACE) {
+    // do something while SPACE is held
+    time.Sleep(10 * time.Millisecond)
+}
+```
+
+Because `IsPressed` does not consume queue events, it can be called freely alongside `GetKeyEventTS` without interfering with the event stream.
+
+**Measuring keypress duration — `WaitKeyReleaseTS`:**
+
+`WaitKeyReleaseTS` blocks until a KEY_UP event arrives for the specified key and returns its SDL3 hardware timestamp in nanoseconds. Together with the KEY_DOWN timestamp from `GetKeyEventTS`, this gives nanosecond-precision keypress duration:
+
+```go
+key, downTS, _ := exp.Keyboard.GetKeyEventTS(responseKeys, -1)
+// ... optionally update display while key is held ...
+upTS, _ := exp.Keyboard.WaitKeyReleaseTS(key, 5000)
+durationNS := upTS - downTS           // nanoseconds
+durationMS := durationNS / 1_000_000  // milliseconds
+```
+
+This is the recommended approach for paradigms where press duration is a dependent variable (e.g., force-choice hold-to-respond, finger-tapping, or hold-triggered responses).
 
 ### Mouse
 
@@ -619,6 +678,12 @@ btn, eventTS, err := exp.Mouse.GetPressEventTS(3000)
 // Non-blocking poll
 btn, err := exp.Mouse.Check()
 
+// Query whether a button is physically held down right now
+held := exp.Mouse.IsPressed(sdl.BUTTON_LEFT)
+
+// Wait for MOUSE_BUTTON_UP; returns its SDL hardware timestamp (nanoseconds)
+upTS, err := exp.Mouse.WaitButtonReleaseTS(btn, 5000)
+
 // Current cursor position in center-based coordinates
 x, y := exp.Mouse.Position()
 
@@ -626,7 +691,15 @@ x, y := exp.Mouse.Position()
 exp.Mouse.ShowCursor(false)
 ```
 
-Button values: `control.BUTTON_LEFT`, `control.BUTTON_RIGHT`.
+Button values: `sdl.BUTTON_LEFT`, `sdl.BUTTON_MIDDLE`, `sdl.BUTTON_RIGHT`, `sdl.BUTTON_X1`, `sdl.BUTTON_X2`.
+
+`IsPressed` and `WaitButtonReleaseTS` mirror the keyboard's `IsPressed` and `WaitKeyReleaseTS` and can be used to measure click-hold duration:
+
+```go
+btn, downTS, _ := exp.Mouse.GetPressEventTS(-1)
+upTS, _        := exp.Mouse.WaitButtonReleaseTS(btn, 5000)
+durationMS     := int64(upTS-downTS) / 1_000_000
+```
 
 ### Multi-device input — `WaitAnyEventTS`
 
@@ -859,6 +932,31 @@ func (m *MyStimulus) Draw(screen *apparatus.Screen) error {
 func (m *MyStimulus) Present(screen *apparatus.Screen, clear, update bool) error {
     return stimuli.PresentDrawable(m, screen, clear, update)
 }
+```
+
+### Interactive widgets
+
+Two stimuli present a UI and collect a structured response from the participant in a blocking loop. Neither is timing-critical, so they use `sdl.WaitEvent` rather than VSYNC polling.
+
+**`Menu`** — a numbered, keyboard-navigable list:
+
+```go
+m := stimuli.NewMenu([]string{"Beginner", "Expert", "Practice run"})
+// Optional customisation:
+m.HighlightColor = sdl.Color{R: 255, G: 220, B: 0, A: 255}
+
+idx, err := m.Get(exp.Screen, exp.Keyboard, 0)
+// idx is 0-based; -1 + sdl.EndLoop on ESC/quit
+```
+
+The selected item is shown with a `>` prefix in `HighlightColor`; all others use `TextColor`. Navigation: UP/DOWN arrows move the highlight; ENTER or SPACE confirms; digit keys 1–9 (0 for tenth) select directly without requiring confirmation.
+
+**`ChoiceGrid`** — a grid of labelled buttons, activated by mouse click or matching key:
+
+```go
+cg := stimuli.NewChoiceGrid([]string{"B","C","D","F","G"}, 3, "Pick 3 letters:")
+selections, err := cg.Get(exp.Screen, exp.Keyboard)
+// selections is []string in press order
 ```
 
 ---

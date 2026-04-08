@@ -346,6 +346,7 @@ Both support a `Font *ttf.Font` field — set it to override the screen default.
 | `NewThermometerDisplay(size FPoint, nSegments int, state, goal float32) *ThermometerDisplay` | Segmented progress bar. `State` and `Goal` in 0–100. |
 | `NewChoiceGrid(choices []string, maxSelect int, prompt string) *ChoiceGrid` | Multiple-choice button grid (mouse + keyboard). See below. |
 | `NewTextInput(msg string, pos FPoint, boxW float32, bgColor, frameColor, textColor Color) *TextInput` | Free-text keyboard input box. Call `ti.Get(screen, keyboard)`. |
+| `NewMenu(items []string) *Menu` | Numbered keyboard-navigable list. Call `m.Get(screen, keyboard, initialSel)`. |
 
 ### ChoiceGrid
 
@@ -361,6 +362,19 @@ selections, err := cg.Get(exp.Screen, exp.Keyboard)
 - `MaxSelect == 0`: participant presses ENTER or SPACE to submit.
 - BACKSPACE removes the last selection.
 - Both mouse click and matching keypress (single-char labels) activate buttons.
+
+### Menu
+
+```go
+m := stimuli.NewMenu([]string{"Option A", "Option B", "Option C"})
+m.Pos = sdl.FPoint{X: 0, Y: 0}    // optional: reposition (default = screen center)
+m.HighlightColor = control.Yellow  // optional: override highlight color
+
+idx, err := m.Get(exp.Screen, exp.Keyboard, 0)  // 0 = initially highlight first item
+// idx is 0-based; -1 + sdl.EndLoop on ESC/quit
+```
+
+Navigation: UP/DOWN arrows move the highlight; ENTER or SPACE confirms; number keys 1–9 (0 for tenth) select and confirm directly. The selected item is shown in `HighlightColor` with a `>` prefix; others use `TextColor`. `LineSpacing` controls vertical item spacing (0 = auto from font height).
 
 ### Animated / VSYNC-locked Loops
 
@@ -526,12 +540,20 @@ key, err := exp.Keyboard.Wait()                                   // any key
 key, err := exp.Keyboard.WaitKey(control.K_SPACE)                // specific key
 key, err := exp.Keyboard.WaitKeys(keys, timeoutMS)                // first of several keys (−1 = no timeout)
 key, rt, err := exp.Keyboard.WaitKeysRT(keys, timeoutMS)          // with RT in ms from call site
-key, ts, err := exp.Keyboard.GetKeyEventTS(keys, timeoutMS)     // with SDL event timestamp (nanoseconds)
+key, ts, err := exp.Keyboard.GetKeyEventTS(keys, timeoutMS)       // with SDL event timestamp (nanoseconds)
+events, err := exp.Keyboard.GetKeyEventsTS(keys, timeoutMS)       // first key + 50 ms window; for bilateral responses
+events, err := exp.Keyboard.CollectKeyEventsTS(keys, durationMS)  // all keys during full fixed window
 key, err := exp.Keyboard.Check()                                  // non-blocking poll
+held := exp.Keyboard.IsPressed(key)                               // true if key is physically held now
+upTS, err := exp.Keyboard.WaitKeyReleaseTS(key, timeoutMS)        // wait for KEY_UP; returns hardware timestamp
 exp.Keyboard.Clear()                                              // drain SDL event queue
 ```
 
 `WaitKeys` and `WaitKeysRT` return `0, nil` on timeout; return `sdl.EndLoop` on ESC or window close.
+
+`IsPressed` queries SDL's scancode state array — no event queue involvement. `WaitKeyReleaseTS` returns the KEY_UP hardware timestamp so that `upTS - downTS` gives nanosecond-precision press duration.
+
+**`GetKeyEventsTS` — two-phase collection for bilateral responses.** The timeout governs how long to wait for the *first* key. After the first key arrives, the function waits an additional 50 ms for any second key before returning. This extra window is necessary because human "simultaneous" bilateral presses (e.g. both hands at once) arrive 10–50 ms apart — a non-blocking drain after the first key would miss the second key almost every time. Use `GetKeyEventTS` for ordinary single-key trials to avoid the 50 ms overhead.
 
 **`GetKeyEventTS`** returns the SDL3 `KeyboardEvent.Timestamp` field — the nanosecond time at which the hardware key-down event was generated, on the same clock as `sdl.TicksNS()` and `Screen.FlipTS()`. This allows computing reaction time from any specific stimulus onset without manual arithmetic:
 
@@ -549,12 +571,14 @@ rtToStim1 := int64(eventTS - onset)  // nanoseconds
 x, y := exp.Mouse.Position()                              // current position (center coords)
 btn, err := exp.Mouse.WaitPress()                         // block until button pressed
 btn, rt, err := exp.Mouse.WaitPressRT(timeoutMS)          // with RT in ms from call site
-btn, ts, err := exp.Mouse.GetPressEventTS(timeoutMS)     // with SDL event timestamp (nanoseconds)
+btn, ts, err := exp.Mouse.GetPressEventTS(timeoutMS)      // with SDL event timestamp (nanoseconds)
 btn, err := exp.Mouse.Check()                             // non-blocking poll
+held := exp.Mouse.IsPressed(sdl.BUTTON_LEFT)              // true if button is physically held now
+upTS, err := exp.Mouse.WaitButtonReleaseTS(btn, timeoutMS) // wait for MOUSE_BUTTON_UP; hardware timestamp
 exp.Mouse.ShowCursor(show bool) error
 ```
 
-`WaitPressRT` mirrors `Keyboard.WaitKeysRT`: reaction time is measured in milliseconds from the call site. `GetPressEventTS` returns the SDL3 hardware event timestamp in nanoseconds, suitable for use with `ShowTS`.
+`WaitPressRT` mirrors `Keyboard.WaitKeysRT`: reaction time is measured in milliseconds from the call site. `GetPressEventTS` returns the SDL3 hardware event timestamp in nanoseconds, suitable for use with `ShowTS`. `IsPressed` and `WaitButtonReleaseTS` mirror the keyboard's `IsPressed` and `WaitKeyReleaseTS`.
 
 ### GamePad
 

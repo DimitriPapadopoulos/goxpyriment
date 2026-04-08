@@ -84,7 +84,10 @@ kb := &apparatus.Keyboard{PollKeys: pollFunc}  // injected by control.Experiment
 | `WaitKey(key sdl.Keycode)` | Convenience for single key |
 | `WaitKeysRT(keys, timeoutMS)` | Returns `(key, rtMs, error)` |
 | `GetKeyEventTS(keys, timeoutMS)` | Returns `(key, eventTimestampNS, error)` — hardware-precision SDL3 timestamp |
-| `GetKeyEventsTS(keys, timeoutMS)` | Returns `([]InputEvent, error)` — all queued events ordered by timestamp |
+| `GetKeyEventsTS(keys, timeoutMS)` | Returns `([]InputEvent, error)` — first key + 50 ms simultaneity window; for bilateral responses |
+| `CollectKeyEventsTS(keys, durationMS)` | Returns `([]InputEvent, error)` — all keys pressed during the full fixed window |
+| `IsPressed(key)` | Returns `true` if key is physically held right now (scancode state, no queue) |
+| `WaitKeyReleaseTS(key, timeoutMS)` | Blocks until KEY_UP; returns hardware timestamp for duration measurement |
 | `Check()` | Non-blocking poll; returns first key or 0 |
 | `Clear()` | Drain SDL event queue |
 

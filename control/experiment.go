@@ -30,7 +30,11 @@ type EventState struct {
 	LastMouseButton      uint32
 	LastKeyTimestamp     uint64 // SDL3 event timestamp in nanoseconds (same clock as TicksNS)
 	LastMouseTimestamp   uint64 // SDL3 event timestamp in nanoseconds
-	QuitRequested        bool
+	LastKeyUp                sdl.Keycode
+	LastKeyUpTimestamp       uint64 // SDL3 event timestamp in nanoseconds for KEY_UP
+	LastMouseButtonUp        uint32
+	LastMouseButtonUpTimestamp uint64 // SDL3 event timestamp in nanoseconds for MOUSE_BUTTON_UP
+	QuitRequested            bool
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +408,7 @@ func (e *Experiment) Initialize() error {
 		e.ttfLoader = loadTTF()
 	}
 
-	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS | sdl.INIT_AUDIO); err != nil {
+	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS | sdl.INIT_AUDIO | sdl.INIT_JOYSTICK | sdl.INIT_GAMEPAD); err != nil {
 		return err
 	}
 
@@ -440,6 +444,10 @@ func (e *Experiment) Initialize() error {
 			state := e.PollEvents(nil)
 			return state.LastKey, state.LastKeyTimestamp, state.QuitRequested
 		},
+		PollKeyUps: func() (sdl.Keycode, uint64, bool) {
+			state := e.PollEvents(nil)
+			return state.LastKeyUp, state.LastKeyUpTimestamp, state.QuitRequested
+		},
 	}
 	e.Mouse = &apparatus.Mouse{
 		PollButtons: func() (uint32, bool) {
@@ -449,6 +457,10 @@ func (e *Experiment) Initialize() error {
 		PollButtonsWithTS: func() (uint32, uint64, bool) {
 			state := e.PollEvents(nil)
 			return state.LastMouseButton, state.LastMouseTimestamp, state.QuitRequested
+		},
+		PollButtonUps: func() (uint32, uint64, bool) {
+			state := e.PollEvents(nil)
+			return state.LastMouseButtonUp, state.LastMouseButtonUpTimestamp, state.QuitRequested
 		},
 	}
 
@@ -544,6 +556,10 @@ func (e *Experiment) PollEvents(handle func(ev sdl.Event) bool) EventState {
 	e.event.LastKeyTimestamp = 0
 	e.event.LastMouseButton = 0
 	e.event.LastMouseTimestamp = 0
+	e.event.LastKeyUp = 0
+	e.event.LastKeyUpTimestamp = 0
+	e.event.LastMouseButtonUp = 0
+	e.event.LastMouseButtonUpTimestamp = 0
 
 	var ev sdl.Event
 	for pollEvent(&ev) {
@@ -559,11 +575,23 @@ func (e *Experiment) PollEvents(handle func(ev sdl.Event) bool) EventState {
 				e.event.LastKey = ke.Key
 				e.event.LastKeyTimestamp = ke.Timestamp
 			}
+		case sdl.EVENT_KEY_UP:
+			ke := ev.KeyboardEvent()
+			if e.event.LastKeyUp == 0 {
+				e.event.LastKeyUp = ke.Key
+				e.event.LastKeyUpTimestamp = ke.Timestamp
+			}
 		case sdl.EVENT_MOUSE_BUTTON_DOWN:
 			if e.event.LastMouseButton == 0 {
 				me := ev.MouseButtonEvent()
 				e.event.LastMouseButton = uint32(me.Button)
 				e.event.LastMouseTimestamp = me.Timestamp
+			}
+		case sdl.EVENT_MOUSE_BUTTON_UP:
+			if e.event.LastMouseButtonUp == 0 {
+				me := ev.MouseButtonEvent()
+				e.event.LastMouseButtonUp = uint32(me.Button)
+				e.event.LastMouseButtonUpTimestamp = me.Timestamp
 			}
 		}
 
