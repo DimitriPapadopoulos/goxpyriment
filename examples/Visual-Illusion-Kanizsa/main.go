@@ -23,8 +23,8 @@ const (
 )
 
 func main() {
-	radiusFlag := flag.Float64("r", defaultCircleRadius, "Radius of the inducing circles (pixels)")
-	sizeFlag := flag.Float64("w", defaultSquareSize, "Size of the central square (pixels)")
+	radiusFlag := flag.Float64("radius", defaultCircleRadius, "Radius of the inducing circles (pixels)")
+	sizeFlag := flag.Float64("squaresize", defaultSquareSize, "Size of the central square (pixels)")
 
 	exp := control.NewExperimentFromFlags("Kanizsa Square", control.LightGray, control.White, 16)
 	defer exp.End()

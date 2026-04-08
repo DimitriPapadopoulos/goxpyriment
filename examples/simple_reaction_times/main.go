@@ -5,8 +5,9 @@ package main
 
 import (
 	"fmt"
+	"math"
+	"sort"
 
-	"github.com/chrplr/goxpyriment/clock"
 	"github.com/chrplr/goxpyriment/control"
 	"github.com/chrplr/goxpyriment/design"
 	"github.com/chrplr/goxpyriment/stimuli"
@@ -23,10 +24,11 @@ func main() {
 	exp := control.NewExperimentFromFlags("Visual Detection", control.Black, control.White, 32)
 	defer exp.End()
 
+        exp.HideCursor()
 	exp.AddDataVariableNames([]string{"trial", "wait_time", "key", "rt"})
 
 	// 2. Prepare stimuli
-	target := stimuli.NewTextLine("+", 0, 0, control.DefaultTextColor)
+	target := stimuli.NewFixCross(40, 5, control.DefaultTextColor)
 
 	instrText := fmt.Sprintf("From time to time, a cross will appear at the center of screen.\n\nYour task is to press the SPACEBAR as quickly as possible when you see it (We measure your reaction-time).\n\nThere will be %d trials in total.\n\nPress the spacebar to start.", NTrials)
 
@@ -36,6 +38,7 @@ func main() {
 		exp.ShowInstructions(instrText)
 
 		// Loop through trials
+		var rts []float64
 		for i := 0; i < NTrials; i++ {
 			// Blank screen
 			exp.Blank(0)
@@ -43,20 +46,59 @@ func main() {
 			waitTime := design.RandInt(MinWaitTime, MaxWaitTime-1)
 			exp.Wait(waitTime)
 
-			// Target stimulus
-			exp.Show(target)
+			// Flush stale events before showing target to avoid negative RTs
+			exp.Keyboard.Clear()
 
-			// Wait for response
-			startTime := clock.GetTime()
-			key, _ := exp.Keyboard.Wait()
-			rt := clock.GetTime() - startTime
+			// Target stimulus — capture flip timestamp for onset-locked RT
+			onset, _ := exp.ShowTS(target)
 
-			exp.Data.Add(i, waitTime, key, rt)
-			fmt.Printf("Trial %d: Wait=%d ms, Key=%d, RT=%d ms\n", i, waitTime, key, rt)
+			// Wait for response; RT is measured from hardware event timestamps
+			key, keyTS, _ := exp.Keyboard.GetKeyEventTS(nil, MaxResponseDelay)
+			rtMS := int64(keyTS-onset) / 1_000_000
 
-			// Small pause between trials
-			exp.Wait(500)
+			if key != 0 {
+				rts = append(rts, float64(rtMS))
+			}
+			exp.Data.Add(i, waitTime, key, rtMS)
+			fmt.Printf("Trial %d: Wait=%d ms, Key=%d, RT=%d ms\n", i, waitTime, key, rtMS)
+
+			// Display RT feedback for 2 seconds
+			var feedbackText string
+			if key == 0 {
+				feedbackText = "Too slow!"
+			} else {
+				feedbackText = fmt.Sprintf("RT: %d ms", rtMS)
+			}
+			feedback := stimuli.NewTextLine(feedbackText, 0, 0, control.DefaultTextColor)
+			exp.Show(feedback)
+			exp.Wait(2000)
 		}
+
+		// Summary screen
+		summaryText := "Experiment complete!\n\nNo valid responses recorded.\n\nPress any key to exit."
+		if len(rts) > 0 {
+			sort.Float64s(rts)
+			n := len(rts)
+			var median float64
+			if n%2 == 0 {
+				median = (rts[n/2-1] + rts[n/2]) / 2
+			} else {
+				median = rts[n/2]
+			}
+			mean := 0.0
+			for _, v := range rts {
+				mean += v
+			}
+			mean /= float64(n)
+			variance := 0.0
+			for _, v := range rts {
+				d := v - mean
+				variance += d * d
+			}
+			stddev := math.Sqrt(variance / float64(n))
+			summaryText = fmt.Sprintf("Experiment complete!\n\nMedian RT: %.0f ms\nSD: %.0f ms\n\nPress any key to exit.", median, stddev)
+		}
+		exp.ShowInstructions(summaryText)
 
 		return control.EndLoop // Graceful exit
 	})
