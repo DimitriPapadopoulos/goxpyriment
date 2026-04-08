@@ -40,6 +40,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Zyko0/go-sdl3/sdl"
@@ -258,13 +259,38 @@ func showAttractor(exp *control.Experiment) error {
 
 // ── Stream presentation with live looking-time coding ─────────────────────────
 
+// formatDurations serialises a slice of millisecond durations as a
+// semicolon-separated string suitable for a CSV cell, e.g. "1200;340;88".
+// Returns an empty string when the slice is empty.
+func formatDurations(ds []int64) string {
+	if len(ds) == 0 {
+		return ""
+	}
+	parts := make([]string, len(ds))
+	for i, d := range ds {
+		parts[i] = strconv.FormatInt(d, 10)
+	}
+	return strings.Join(parts, ";")
+}
+
 // presentStreams displays both streams simultaneously for the full trial duration
 // (48 frames × 800 ms = ~38.4 s). The experimenter holds LEFT or RIGHT to code
-// the infant's gaze. Returns (lookLeft, lookRight) cumulative times in ms.
-func presentStreams(exp *control.Experiment, left, right []*stimuli.DotCloud) (int64, int64, error) {
+// the infant's gaze.
+//
+// Returns cumulative looking times (lookLeft, lookRight) in ms, plus the list of
+// individual press durations for each key. Durations are measured with
+// hardware-precision SDL3 timestamps: KEY_DOWN and KEY_UP event timestamps are
+// used for presses that complete during the trial; WaitKeyReleaseTS is called for
+// any key that is still held when the display loop ends.
+func presentStreams(exp *control.Experiment, left, right []*stimuli.DotCloud) (int64, int64, []int64, []int64, error) {
 	var lookLeft, lookRight int64
 	leftHeld, rightHeld := false, false
 	prev := clock.GetTime()
+
+	// Hardware timestamps of the most recent KEY_DOWN for each key.
+	var leftDownTS, rightDownTS uint64
+	// Per-press durations in ms.
+	var leftDurations, rightDurations []int64
 
 	accum := func() {
 		now := clock.GetTime()
@@ -282,18 +308,32 @@ func presentStreams(exp *control.Experiment, left, right []*stimuli.DotCloud) (i
 		state := exp.PollEvents(func(e sdl.Event) bool {
 			switch e.Type {
 			case sdl.EVENT_KEY_DOWN:
-				switch e.KeyboardEvent().Key {
+				ke := e.KeyboardEvent()
+				switch ke.Key {
 				case control.K_LEFT:
-					leftHeld = true
+					if !leftHeld {
+						leftHeld = true
+						leftDownTS = ke.Timestamp
+					}
 				case control.K_RIGHT:
-					rightHeld = true
+					if !rightHeld {
+						rightHeld = true
+						rightDownTS = ke.Timestamp
+					}
 				}
 			case sdl.EVENT_KEY_UP:
-				switch e.KeyboardEvent().Key {
+				ke := e.KeyboardEvent()
+				switch ke.Key {
 				case control.K_LEFT:
-					leftHeld = false
+					if leftHeld {
+						leftHeld = false
+						leftDurations = append(leftDurations, int64(ke.Timestamp-leftDownTS)/1_000_000)
+					}
 				case control.K_RIGHT:
-					rightHeld = false
+					if rightHeld {
+						rightHeld = false
+						rightDurations = append(rightDurations, int64(ke.Timestamp-rightDownTS)/1_000_000)
+					}
 				}
 			}
 			return false
@@ -324,18 +364,31 @@ func presentStreams(exp *control.Experiment, left, right []*stimuli.DotCloud) (i
 			_ = right[i].Draw(exp.Screen)
 			_ = exp.Screen.Update()
 			if err := waitRecording(stimulusDurationMs); err != nil {
-				return lookLeft, lookRight, err
+				return lookLeft, lookRight, leftDurations, rightDurations, err
 			}
 			// Blank ISI.
 			_ = exp.Screen.Clear()
 			_ = exp.Screen.Update()
 			if err := waitRecording(isiDurationMs); err != nil {
-				return lookLeft, lookRight, err
+				return lookLeft, lookRight, leftDurations, rightDurations, err
 			}
 		}
 	}
 
-	return lookLeft, lookRight, nil
+	// If a key is still held at the end of the trial, use WaitKeyReleaseTS to
+	// obtain the hardware-precision KEY_UP timestamp and close the last press.
+	if leftHeld {
+		if upTS, err := exp.Keyboard.WaitKeyReleaseTS(control.K_LEFT, 10_000); err == nil && upTS > 0 {
+			leftDurations = append(leftDurations, int64(upTS-leftDownTS)/1_000_000)
+		}
+	}
+	if rightHeld {
+		if upTS, err := exp.Keyboard.WaitKeyReleaseTS(control.K_RIGHT, 10_000); err == nil && upTS > 0 {
+			rightDurations = append(rightDurations, int64(upTS-rightDownTS)/1_000_000)
+		}
+	}
+
+	return lookLeft, lookRight, leftDurations, rightDurations, nil
 }
 
 // ── Trial structure ───────────────────────────────────────────────────────────
@@ -469,6 +522,7 @@ func main() {
 		"left_stream", "right_stream", "constant_num",
 		"look_left_ms", "look_right_ms",
 		"look_stream_a_ms", "look_stream_b_ms", "log_ratio_a_vs_b",
+		"left_press_durations_ms", "right_press_durations_ms",
 	})
 
 	instr := fmt.Sprintf(
@@ -502,15 +556,17 @@ func main() {
 			}
 
 			// Present both streams and record looking times.
-			lookLeft, lookRight, err := presentStreams(exp, leftArrays, rightArrays)
+			lookLeft, lookRight, leftDurs, rightDurs, err := presentStreams(exp, leftArrays, rightArrays)
 			if err != nil {
 				return err
 			}
 
 			// Resolve looking times relative to stream A (primary) vs stream B.
 			lookA, lookB := lookLeft, lookRight
+			lookDursA, lookDursB := leftDurs, rightDurs
 			if !t.streamALeft {
 				lookA, lookB = lookRight, lookLeft
+				lookDursA, lookDursB = rightDurs, leftDurs
 			}
 			totalA += lookA
 			totalB += lookB
@@ -525,6 +581,7 @@ func main() {
 				t.leftStream.String(), t.rightStream.String(), t.constantNum,
 				lookLeft, lookRight,
 				lookA, lookB, logRatio,
+				formatDurations(lookDursA), formatDurations(lookDursB),
 			)
 
 			if trialIdx < nTrials-1 {
