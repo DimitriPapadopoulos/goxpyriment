@@ -17,7 +17,7 @@ Welcome! If you are a psychologist or neuroscientist used to building experiment
 
 If you've ever spent three hours fixing a `conda` environment or `pip` conflict just to run a simple experiment on a lab computer, you'll love Go.
 
-1. **Zero-Dependency Deployment**: When you build a Go experiment, it produces a **single binary** (an `.exe` on Windows, an AppImage on Linux, a `.app` on macOS). Drop it on any lab computer and it just works — no Python installation required.
+1. **Zero-Dependency Deployment**: When you build a Go experiment, it produces a **standalone executable program** . Drop it on any lab computer and it just works — no Python and or Library Installation required.
 2. **Timing Precision**: Go is a compiled language with a very efficient runtime. `goxpyriment` runs the stimulus loop VSYNC-locked with GC pauses disabled, giving you sub-millisecond frame jitter on typical hardware.
 3. **AI-friendly API**: The linear, consistent API makes it very well suited to "vibe-coding" — describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is usually 90 % ready to run immediately.
 
@@ -130,7 +130,7 @@ func main() {
 
 
 exp.Run handles the detection of the ESC keypress to interrupt the experiment.
-The `.csv` result file (a CSV with a metadata header) is written to `~/goxpy_data/` automatically when the experiment ends. Each row gets the subject ID and a timestamp for free.
+The `.csv` result file (a CSV with a metadata header) is written to `~/goxpy_data/` automatically when the experiment ends. 
 
 ---
 
@@ -209,35 +209,34 @@ func main() {
 }
 ```
 
-### Image stream
+The same pattern exists for images and sounds:
 
-For image or mixed stimulus streams, build the element list manually:
 
-```go
-stims := []stimuli.VisualStimulus{pic1, pic2, fixation, pic3}
-on  := 100 * time.Millisecond
-off :=   0 * time.Millisecond
+* Images: 
 
-elements := stimuli.MakeRegularVisualStream(stims, on, off)
-events, logs, err := stimuli.PresentStreamOfImages(exp.Screen, elements, 0, 0)
-_ = events; _ = logs; _ = err  // inspect as shown in the text stream example
-```
 
-### Audio stream
+   ```go
+   stims := []stimuli.VisualStimulus{pic1, pic2, fixation, pic3}
+   on  := 100 * time.Millisecond
+   off :=   0 * time.Millisecond
 
-The same pattern exists for sounds:
+   elements := stimuli.MakeRegularVisualStream(stims, on, off)
+   events, logs, err := stimuli.PresentStreamOfImages(exp.Screen, elements, 0, 0)
+   ```
 
-```go
-tones     := []stimuli.AudioPlayable{tone440, tone880, tone440}
-onsets    := []int{0, 500, 1000}   // ms from stream start
-durations := []int{200, 200, 200}
+* Sounds
 
-elements, _ := stimuli.MakeSoundStream(tones, onsets, durations)
-events, logs, err := stimuli.PlayStreamOfSounds(elements)
-_ = events; _ = logs; _ = err
-```
 
-All three stream functions return `([]UserEvent, []TimingLog, error)`, making it straightforward to analyse timing quality and log participant responses.
+   ```go
+   tones     := []stimuli.AudioPlayable{tone440, tone880, tone440}
+   onsets    := []int{0, 500, 1000}   // ms from stream start
+   durations := []int{200, 200, 200}
+
+   elements, _ := stimuli.MakeSoundStream(tones, onsets, durations)
+   events, logs, err := stimuli.PlayStreamOfSounds(elements)
+   ```
+
+All three stream functions return `([]UserEvent, []TimingLog, error)` to analyse timing quality and log participant responses.
 
 ---
 

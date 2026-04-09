@@ -411,12 +411,12 @@ the compositor version and GPU driver.
 
 **Linux / KMS–DRM (no display server).** The lowest-latency configuration on
 Linux is to run without any display server at all, from a virtual terminal
-(`Ctrl+Alt+F2`). Setting the environment variable `SDL_VIDEO_DRIVER=kmsdrm`
+(`Ctrl+Alt+F2`). Setting the environment variable `SDL_VIDEODRIVER=kmsdrm`
 before launching the experiment directs SDL3 to use the Linux kernel's
 KMS/DRM subsystem directly, bypassing both X11 and Wayland entirely:
 
 ```bash
-SDL_VIDEO_DRIVER=kmsdrm go run myexperiment/main.go
+SDL_VIDEODRIVER=kmsdrm go run myexperiment/main.go
 ```
 
 This is the recommended configuration for the most demanding timing
@@ -1508,7 +1508,7 @@ always the intermediary for frame delivery, but modern compositors
 applications, achieving similar low-latency behavior in practice. The
 best achievable timing on Linux is obtained by running without any
 display server: setting the environment variable
-`SDL_VIDEO_DRIVER=kmsdrm` before launching the experiment directs SDL3
+`SDL_VIDEODRIVER=kmsdrm` before launching the experiment directs SDL3
 to communicate with the Linux KMS/DRM subsystem directly, bypassing X11
 and Wayland entirely. This configuration — typically used from a virtual
 terminal (`Ctrl+Alt+F2`) — is recommended for the most demanding timing
