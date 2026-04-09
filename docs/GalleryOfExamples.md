@@ -44,7 +44,6 @@ Programs that open a **GetParticipantInfo** dialog collect all setup interactive
 Full experiments that record and save behavioural data to an `.csv` file in `goxpy_data/`.
 
 <!-- BEGIN:experiments -->
-
 | Directory | Task | Reference |
 |-----------|------|-----------|
 | [Attention-Posner-Task](https://github.com/chrplr/goxpyriment/tree/main/examples/Attention-Posner-Task) | Arrow cue directs covert attention; measure cost/benefit on reaction time to a peripheral target | Posner (1980) |
@@ -86,7 +85,6 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 | [Temporal-Integration-Word-Recognition](https://github.com/chrplr/goxpyriment/tree/main/examples/Temporal-Integration-Word-Recognition) | Alternating odd/even letter components at variable SOA; Exp 1 (subjective report: 0/1/2 words perceived) and Exp 2 (lexical decision with RT); experiment selected via GetParticipantInfo UI | Forget et al. (2010) |
 | [Trubutschek_Unconscious_Working_Memory](https://github.com/chrplr/goxpyriment/tree/main/examples/Trubutschek_Unconscious_Working_Memory) | Probe access to briefly presented stimuli below and above the threshold of consciousness | Trübutschek et al. (2017) |
 | [Visual-Illusion-Lilac-Chaser](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Lilac-Chaser) | Lilac chaser illusion: a ring of disappearing disks produces a rotating green afterimage |  |
-
 <!-- END:experiments -->
 
 ---
@@ -96,7 +94,6 @@ Full experiments that record and save behavioural data to an `.csv` file in `gox
 Visual illusions, interactive showcases, and minimal templates. Most do not write a data file.
 
 <!-- BEGIN:demos -->
-
 | Directory | Description |
 |-----------|-------------|
 | [canvas_demo](https://github.com/chrplr/goxpyriment/tree/main/examples/canvas_demo) | Drawing on an off-screen `Canvas` surface before presenting it in one frame |
@@ -104,16 +101,12 @@ Visual illusions, interactive showcases, and minimal templates. Most do not writ
 | [hello_world](https://github.com/chrplr/goxpyriment/tree/main/examples/hello_world) | Simplest possible goxpyriment program — good starting point for new users |
 | [Motion-Blur](https://github.com/chrplr/goxpyriment/tree/main/examples/Motion-Blur) | Motion blur vs. phantom array demo: animated bar demonstrates retinal blur and the strobe effect at 60 Hz |
 | [mouse_audio_feedback](https://github.com/chrplr/goxpyriment/tree/main/examples/mouse_audio_feedback) | Left/right mouse clicks trigger ping/buzzer audio; useful for testing sound output |
-| [play_two_videos](https://github.com/chrplr/goxpyriment/tree/main/examples/play_two_videos) | Plays `.mpg` video pairs side by side and records a keypress response after each pair |
-| [play_videos](https://github.com/chrplr/goxpyriment/tree/main/examples/play_videos) | Plays all `.mpg` files from an `assets/` folder sequentially |
 | [random-dot-stereogram](https://github.com/chrplr/goxpyriment/tree/main/examples/random-dot-stereogram) | Random-dot stereogram that reveals a 3-D shape when fused binocularly |
-| [simple_example](https://github.com/chrplr/goxpyriment/tree/main/examples/simple_example) | Minimal five-trial loop (fixation → stimulus → keypress); use as a starting template |
 | [stimuli_extras](https://github.com/chrplr/goxpyriment/tree/main/examples/stimuli_extras) | Showcase of advanced stimuli: visual mask, Gabor patch, dot cloud, stimulus circle, thermometer |
 | [text_input](https://github.com/chrplr/goxpyriment/tree/main/examples/text_input) | Demonstration of the `TextInput` stimulus collecting free-text keyboard input |
 | [Visual-Angle-Calibration](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Angle-Calibration) | Draws concentric rings at 2°, 5°, and 10° of visual angle for a quick sanity-check of the `units.Monitor` calibration |
 | [Visual-Illusion-Ebbginghaus](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Ebbginghaus) | Animated Ebbinghaus (Titchener circles) size-contrast illusion |
 | [Visual-Illusion-Kanizsa](https://github.com/chrplr/goxpyriment/tree/main/examples/Visual-Illusion-Kanizsa) | Kanizsa illusory-contour square: a square is perceived where none is drawn |
-
 <!-- END:demos -->
 
 ---
