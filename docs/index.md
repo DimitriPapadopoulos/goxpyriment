@@ -20,7 +20,7 @@ If you are looking for a simpler, *no-code experiment generator*, check out [Gos
 
 ## Documentation
 
-First, you can skim over this [short paper](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment-paper.pdf) which describes the framework.
+First, you can skim over this [short paper](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment_paper.pdf) which describes the framework.
 
 
 Then you can read:
