@@ -35,7 +35,7 @@ If you've ever spent three hours fixing a `conda` environment or `pip` conflict 
 
 ---
 
-To run the following tutorials, you need a Go development environement. See [here](Installing-a-development-environment.md) for installation instructions.
+To run the following tutorials, you need a Go development environment. See [here](Installing-a-development-environment.md) for installation instructions.
 
 ---
 
