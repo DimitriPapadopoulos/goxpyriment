@@ -11,17 +11,15 @@
 
 If you are looking for a simpler, *no-code experiment generator*, check out [Gostim2](https://chrplr.github.io/gostim2/).
 
-> [WARNING!] This software is in beta-testing. 
 
 ---
 
 ## Why goxpyriment?
 
-1. **Zero-dependency deployment.** A finished experiment compiles to a standalone executable. No Python, no conda, no DLL hell on lab computers.
+1. **Zero-dependency deployment.** Your experiments compile to a standalone executables. No Python, no conda, noFont issue, no DLL hell on lab computers.
 2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware.
 3. **AI-friendly API.** The consistent API is well suited to "vibe-coding" — describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is usually ready to run immediately.
 
-> 💡 **TIP:** _AI assisted coding_ After cloning the repository, launch an AI coding agent inside the `goxpyriment` folder and ask it to add a new experiment to the `examples` folder — the agent reads the existing examples for context. Describe the experiment (stimuli, design, etc.) in plain language. Save your prompt in a `description.md` file alongside the code.
 
 > ⚠️ **Beta:** This software is in beta-testing. Although it is usable for real lab experiments, users should (as always) carefully test their program's behaviour, e.g. with a [bbtk](https://chrplr.github.io/bbtkv3/).
 
