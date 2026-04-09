@@ -1,6 +1,6 @@
 # goxpyriment
 
-`goxpyriment` is a high-level Go framework for building behavioral and psychological experiments with precise, VSYNC-locked stimulus timing.
+`goxpyriment` is a high-level Go framework for building behavioral and psychological experiments.
 
 * [GitHub repository](https://github.com/chrplr/goxpyriment)
 * [Google group](https://groups.google.com/a/pallier.org/g/goxpyriment) — Forum
@@ -8,22 +8,20 @@
 
 If you are looking for a simpler, *no-code experiment generator*, check out [Gostim2](https://chrplr.github.io/gostim2/).
 
-
-> [!WARNING] This is beta software, currently under test.
-
 ---
 
 ## Why goxpyriment?
 
 1. **Zero-dependency deployment.** A finished experiment compiles to a standalone executable. No Python, no conda, no DLL of Font hell on lab computers.
-2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware (but Variable Refresh Rate display also handled).
-3. **AI-friendly API.** The API is well suited to "vibe-coding": after cloning the repository, describe your paradigm in plain language to Claude, Gemini, or ChatGPT and the generated code is likely ready to run immediately (but of course must be tested, for example,  with [bbtk](https://chrplr.github.io/bbtkv3/)).
+2. **Timing precision.** The stimulus loop runs VSYNC-locked with GC pauses disabled, giving sub-millisecond frame jitter on typical hardware (Variable Refresh Rate monitors are also handled).
+3. **AI-friendly API.** The API is well suited to "vibe-coding": after cloning the repository, describe your paradigm in plain language to Claude, Gemini, or ChatGPT and try the generated code. Given the examples and the constraints afforded by the framework, the experiment is likely to work as expected (but must be checked, of course).
 
 ---
 
 ## Documentation
 
-First skim over this [short paper](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment-paper.pdf) describing the project. 
+First, you can skim over this [short paper](https://github.com/chrplr/goxpyriment/blob/main/paper/goxpyriment-paper.pdf) which describes the framework.
+
 
 Then you can read:
 
@@ -36,6 +34,7 @@ Then you can read:
 | [Migration Guide](MigrationGuide.md) | Coming from Expyriment, PsychoPy, or Psychtoolbox? | [↓](MigrationGuide.pdf) |
 | [API Reference](API.md) | Complete function and type reference | [↓](API.pdf) |
 | [Timing-Tests](TimingTests.md) | Check the timing of your computer | [↓](TimingTests.pdf) |
+
 --- 
 
 ## Quick Start
